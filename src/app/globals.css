@@ -1,0 +1,131 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Hungry Ape — Banner colors */
+    --background: 196 60% 87%;       /* #a8dde8 — banner sky blue */
+    --foreground: 0 0% 10%;          /* #1a1a1a — banner dark text */
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 10%;
+    --primary: 349 72% 40%;          /* #be1e36 — monkey face crimson */
+    --primary-foreground: 0 0% 98%;
+    --secondary: 196 40% 80%;
+    --secondary-foreground: 0 0% 10%;
+    --muted: 196 30% 82%;
+    --muted-foreground: 0 0% 38%;
+    --accent: 52 100% 50%;           /* #FFD700 — banner yellow splash */
+    --accent-foreground: 0 0% 10%;
+    --destructive: 0 84% 55%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 196 25% 74%;
+    --input: 196 25% 74%;
+    --ring: 52 100% 50%;
+    --radius: 0.75rem;
+
+    /* Hungry Ape custom tokens */
+    --ha-yellow: 52 100% 50%;        /* #FFD700 */
+    --ha-sky: 196 60% 87%;           /* banner bg */
+    --ha-crimson: 349 72% 40%;       /* monkey red */
+    --ha-dark: 0 0% 10%;             /* near-black text */
+    --ha-green: 138 40% 36%;         /* leaf green */
+  }
+
+  .dark {
+    /* Dark: charcoal sweater feel */
+    --background: 0 0% 7%;
+    --foreground: 196 30% 92%;
+    --card: 0 0% 11%;
+    --card-foreground: 196 30% 92%;
+    --popover: 0 0% 11%;
+    --popover-foreground: 196 30% 92%;
+    --primary: 349 72% 50%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 16%;
+    --secondary-foreground: 196 30% 92%;
+    --muted: 0 0% 16%;
+    --muted-foreground: 0 0% 60%;
+    --accent: 52 100% 52%;
+    --accent-foreground: 0 0% 10%;
+    --destructive: 0 62% 38%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 52 100% 52%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+}
+
+/* ── Hungry Ape brand utilities ─────────────────────────────────────────── */
+@layer utilities {
+  /* Yellow brushstroke / paint-splash effect */
+  .ha-yellow-splash {
+    position: relative;
+    display: inline-block;
+  }
+  .ha-yellow-splash::before {
+    content: '';
+    position: absolute;
+    inset: -4px -12px;
+    background: hsl(var(--ha-yellow));
+    border-radius: 40% 60% 55% 45% / 50% 40% 60% 50%;
+    transform: rotate(-1.5deg) skewX(-3deg);
+    z-index: -1;
+  }
+
+  /* Primary crimson gradient */
+  .ha-gradient {
+    background: linear-gradient(135deg, hsl(349 72% 40%), hsl(349 72% 28%));
+  }
+
+  /* Yellow accent gradient */
+  .ha-yellow-gradient {
+    background: linear-gradient(135deg, hsl(52 100% 55%), hsl(45 100% 45%));
+  }
+
+  .ha-glow-yellow {
+    box-shadow: 0 0 20px hsla(52, 100%, 50%, 0.5);
+  }
+
+  .ha-glow-red {
+    box-shadow: 0 0 20px hsla(349, 72%, 40%, 0.35);
+  }
+
+  .ha-card-hover {
+    transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+  }
+  .ha-card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 32px hsla(349, 72%, 30%, 0.18);
+  }
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print\:visible, .print\:visible * {
+    visibility: visible;
+  }
+  .print\:visible {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding-top: 2rem;
+  }
+}
