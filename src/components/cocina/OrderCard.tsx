@@ -74,11 +74,25 @@ export function OrderCard({ order, onStatusChange }: OrderCardProps) {
         </div>
 
         {/* ── Items list ── */}
-        <ul className="space-y-1.5 text-sm">
+        <ul className="space-y-2 text-sm">
           {order.items.map(item => (
-            <li key={item.id} className="flex justify-between items-start gap-4">
-              <span className="font-medium">{item.quantity}x {item.name}</span>
-              <span className="text-muted-foreground tracking-tighter whitespace-nowrap">{formatCLP(item.quantity * item.price)}</span>
+            <li key={item.cartKey || item.id}>
+              <div className="flex justify-between items-start gap-4">
+                <span className="font-medium">{item.quantity}x {item.name}</span>
+                <span className="text-muted-foreground tracking-tighter whitespace-nowrap">{formatCLP(item.quantity * item.price)}</span>
+              </div>
+              {item.selectedModifiers && item.selectedModifiers.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1 pl-4">
+                  {item.selectedModifiers.map((mod, idx) => (
+                    <span
+                      key={idx}
+                      className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20"
+                    >
+                      {mod.optionName}
+                    </span>
+                  ))}
+                </div>
+              )}
             </li>
           ))}
         </ul>

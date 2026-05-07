@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Link from 'next/link';
 import { formatCLP } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
+import { getEffectivePlan } from '@/lib/data';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   ResponsiveContainer, PieChart, Pie, Cell
@@ -73,7 +74,7 @@ export default function InventarioReportesPage() {
       if (!tData) return;
       setTenant(tData);
 
-      const currentPlan = (tData as any).plan_id || 'gratis';
+      const currentPlan = getEffectivePlan(tData as any);
       if (currentPlan === 'gratis') {
         setLocked(true);
         setLoading(false);

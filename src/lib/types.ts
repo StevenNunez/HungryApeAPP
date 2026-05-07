@@ -15,8 +15,38 @@ export interface MenuItem {
   isArchived: boolean;
 }
 
+export interface ModifierOption {
+  id: string;
+  groupId: string;
+  name: string;
+  priceDelta: number;
+  sortOrder: number;
+}
+
+export interface ModifierGroup {
+  id: string;
+  productId: string;
+  name: string;
+  type: 'checkbox' | 'radio';
+  required: boolean;
+  sortOrder: number;
+  options: ModifierOption[];
+}
+
+export interface SelectedModifier {
+  optionId: string;
+  optionName: string;
+  groupName: string;
+  priceDelta: number;
+}
+
 export interface CartItem extends MenuItem {
   quantity: number;
+  /** Unique key: productId + '__' + sorted optionIds — lets the same product appear multiple times with different modifiers */
+  cartKey: string;
+  selectedModifiers: SelectedModifier[];
+  /** Sum of all selected modifier price_deltas */
+  modifierPrice: number;
 }
 
 export type OrderStatus = 'Por Pagar' | 'Pendiente' | 'En preparación' | 'Listo' | 'Entregado';
@@ -61,6 +91,27 @@ export function mapProductRow(row: any): MenuItem {
     stock: row.stock,
     aiHint: row.ai_hint,
     isArchived: row.is_archived || false,
+  };
+}
+
+/** Maps a product_modifier_groups row (with nested options) to ModifierGroup */
+export function mapModifierGroupRow(row: any): ModifierGroup {
+  return {
+    id: row.id,
+    productId: row.product_id,
+    name: row.name,
+    type: row.type,
+    required: row.required,
+    sortOrder: row.sort_order,
+    options: (row.product_modifier_options || [])
+      .sort((a: any, b: any) => a.sort_order - b.sort_order)
+      .map((o: any): ModifierOption => ({
+        id: o.id,
+        groupId: o.group_id,
+        name: o.name,
+        priceDelta: Number(o.price_delta),
+        sortOrder: o.sort_order,
+      })),
   };
 }
 

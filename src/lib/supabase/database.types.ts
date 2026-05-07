@@ -17,6 +17,7 @@ export interface Database {
           subscription_plan: string | null;
           subscription_payment_id: string | null;
           subscription_updated_at: string | null;
+          trial_ends_at: string | null;
           transfer_bank: string | null;
           transfer_account_type: string | null;
           transfer_account_number: string | null;
@@ -38,6 +39,7 @@ export interface Database {
           subscription_plan?: string | null;
           subscription_payment_id?: string | null;
           subscription_updated_at?: string | null;
+          trial_ends_at?: string | null;
           transfer_bank?: string | null;
           transfer_account_type?: string | null;
           transfer_account_number?: string | null;
@@ -58,6 +60,7 @@ export interface Database {
           subscription_plan?: string | null;
           subscription_payment_id?: string | null;
           subscription_updated_at?: string | null;
+          trial_ends_at?: string | null;
           transfer_bank?: string | null;
           transfer_account_type?: string | null;
           transfer_account_number?: string | null;
@@ -66,6 +69,56 @@ export interface Database {
           address?: string | null;
           phone?: string | null;
         };
+        Relationships: never[];
+      };
+      cash_sessions: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          opened_by: string;
+          opened_at: string;
+          opening_amount: number;
+          closed_at: string | null;
+          closing_amount: number | null;
+          notes: string;
+          status: 'open' | 'closed';
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          opened_by: string;
+          opened_at?: string;
+          opening_amount?: number;
+          closed_at?: string | null;
+          closing_amount?: number | null;
+          notes?: string;
+          status?: 'open' | 'closed';
+        };
+        Update: {
+          closed_at?: string | null;
+          closing_amount?: number | null;
+          notes?: string;
+          status?: 'open' | 'closed';
+        };
+        Relationships: never[];
+      };
+      cash_withdrawals: {
+        Row: {
+          id: string;
+          session_id: string;
+          tenant_id: string;
+          amount: number;
+          reason: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          session_id: string;
+          tenant_id: string;
+          amount: number;
+          reason?: string;
+        };
+        Update: never;
         Relationships: never[];
       };
       products: {
@@ -175,6 +228,77 @@ export interface Database {
           price?: number;
           quantity?: number;
         };
+        Relationships: never[];
+      };
+      product_modifier_groups: {
+        Row: {
+          id: string;
+          product_id: string;
+          tenant_id: string;
+          name: string;
+          type: 'checkbox' | 'radio';
+          required: boolean;
+          sort_order: number;
+        };
+        Insert: {
+          id?: string;
+          product_id: string;
+          tenant_id: string;
+          name: string;
+          type?: 'checkbox' | 'radio';
+          required?: boolean;
+          sort_order?: number;
+        };
+        Update: {
+          name?: string;
+          type?: 'checkbox' | 'radio';
+          required?: boolean;
+          sort_order?: number;
+        };
+        Relationships: never[];
+      };
+      product_modifier_options: {
+        Row: {
+          id: string;
+          group_id: string;
+          tenant_id: string;
+          name: string;
+          price_delta: number;
+          sort_order: number;
+        };
+        Insert: {
+          id?: string;
+          group_id: string;
+          tenant_id: string;
+          name: string;
+          price_delta?: number;
+          sort_order?: number;
+        };
+        Update: {
+          name?: string;
+          price_delta?: number;
+          sort_order?: number;
+        };
+        Relationships: never[];
+      };
+      order_item_modifiers: {
+        Row: {
+          id: string;
+          order_item_id: string;
+          option_id: string | null;
+          option_name: string;
+          group_name: string;
+          price_delta: number;
+        };
+        Insert: {
+          id?: string;
+          order_item_id: string;
+          option_id?: string | null;
+          option_name: string;
+          group_name: string;
+          price_delta?: number;
+        };
+        Update: never;
         Relationships: never[];
       };
     };

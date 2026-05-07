@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetFooter
 import { useCart } from '@/hooks/useCart';
 import { formatCLP } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { createOrder as supabaseCreateOrder } from '@/lib/data';
+import { createOrder as supabaseCreateOrder, getEffectivePlan } from '@/lib/data';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -76,12 +76,12 @@ export function Cart() {
             const supabase = createClient();
             supabase
                 .from('tenants')
-                .select('plan_id')
+                .select('plan_id, subscription_status, trial_ends_at')
                 .eq('slug', tenantSlug)
                 .single()
                 .then(({ data }) => {
                     const d = data as any;
-                    if (d?.plan_id) setTenantPlan(d.plan_id);
+                    if (d) setTenantPlan(getEffectivePlan(d));
                 });
         }
     }, [open, tenantSlug]);
@@ -147,7 +147,7 @@ export function Cart() {
             toast({
                 title: isLimitReached ? 'Local muy ocupado 😥' : 'Error al confirmar',
                 description: isLimitReached
-                    ? 'Este local ha alcanzado el límite de pedidos procesados por hoy. Por favor, realiza tu pago o pide directo en la caja a viva voz.'
+                    ? 'Este local ha alcanzado el límite de pedidos por hoy. Por favor, realiza tu pago o pide directamente en caja.'
                     : 'No se pudo crear tu pedido. Inténtalo de nuevo.',
                 variant: 'destructive',
             });
@@ -212,11 +212,11 @@ export function Cart() {
                             {cartItems.length > 0 ? (
                                 <div className="space-y-6">
                                     {cartItems.map((item) => (
-                                        <div key={item.id} className="flex gap-4 items-start group animate-in fade-in slide-in-from-right-4 duration-300">
+                                        <div key={item.cartKey} className="flex gap-4 items-start group animate-in fade-in slide-in-from-right-4 duration-300">
                                             {/* Imagen del Producto */}
                                             <div className="relative h-16 w-16 shrink-0 rounded-xl overflow-hidden shadow-sm border border-border/50">
-                                                <Image 
-                                                    src={item.imageUrl} 
+                                                <Image
+                                                    src={item.imageUrl}
                                                     alt={item.name}
                                                     fill
                                                     className="object-cover transition-transform group-hover:scale-110 duration-500"
@@ -226,12 +226,17 @@ export function Cart() {
 
                                             <div className="flex-1 min-w-0">
                                                 <h4 className="font-bold text-sm text-foreground leading-tight truncate">{item.name}</h4>
-                                                <p className="text-[10px] uppercase font-bold text-primary/80 mt-1 tracking-wider">{item.category}</p>
+                                                {item.selectedModifiers && item.selectedModifiers.length > 0 && (
+                                                    <p className="text-[10px] text-primary/80 mt-0.5 leading-tight">
+                                                        {item.selectedModifiers.map(m => m.optionName).join(' · ')}
+                                                    </p>
+                                                )}
+                                                <p className="text-[10px] uppercase font-bold text-muted-foreground mt-0.5 tracking-wider">{item.category}</p>
 
                                                 <div className="flex items-center gap-4 mt-2">
                                                     <div className="flex items-center bg-muted/50 rounded-lg p-0.5 border border-border/50">
                                                         <button
-                                                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                                                            onClick={() => updateQuantity(item.cartKey, item.quantity - 1)}
                                                             className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-background transition-colors text-muted-foreground hover:text-primary"
                                                             aria-label="Disminuir cantidad"
                                                         >
@@ -239,7 +244,7 @@ export function Cart() {
                                                         </button>
                                                         <span className="w-6 text-center text-[11px] font-bold tabular-nums">{item.quantity}</span>
                                                         <button
-                                                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                                                            onClick={() => updateQuantity(item.cartKey, item.quantity + 1)}
                                                             className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-background transition-colors text-muted-foreground hover:text-primary"
                                                             aria-label="Agregar cantidad"
                                                         >
@@ -248,7 +253,7 @@ export function Cart() {
                                                     </div>
 
                                                     <button
-                                                        onClick={() => removeFromCart(item.id)}
+                                                        onClick={() => removeFromCart(item.cartKey)}
                                                         className="text-muted-foreground/50 hover:text-destructive transition-colors"
                                                         aria-label={`Eliminar ${item.name}`}
                                                     >
@@ -257,7 +262,10 @@ export function Cart() {
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <p className="text-sm font-bold tracking-tight">{formatCLP(item.price * item.quantity)}</p>
+                                                <p className="text-sm font-bold tracking-tight">{formatCLP((item.price + item.modifierPrice) * item.quantity)}</p>
+                                                {item.modifierPrice > 0 && (
+                                                    <p className="text-[10px] text-muted-foreground">{formatCLP(item.price)} base</p>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
@@ -269,7 +277,7 @@ export function Cart() {
                                     </div>
                                     <div>
                                         <p className="text-xl font-brand uppercase tracking-tight text-foreground">Tu carrito está vacío</p>
-                                        <p className="text-sm text-muted-foreground mt-1 max-w-[200px] mx-auto">¡El mono tiene hambre! Añade algo rico del menú.</p>
+                                        <p className="text-sm text-muted-foreground mt-1 max-w-[200px] mx-auto">¡El mono tiene hambre! Agrega algo rico del menú.</p>
                                     </div>
                                 </div>
                             )}

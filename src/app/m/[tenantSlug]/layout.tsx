@@ -14,7 +14,7 @@ export default function CustomerMenuLayout({ children }: { children: React.React
             <Cart />
           </div>
         </header>
-        <main className="flex-1 container px-6 py-10">{children}</main>
+        <main className="flex-1 container px-4 py-6">{children}</main>
         <footer className="border-t border-border py-6">
           <div className="container flex flex-col items-center justify-center gap-1">
             <span className="text-lg">🦍</span>

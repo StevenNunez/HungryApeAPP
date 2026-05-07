@@ -32,11 +32,15 @@ export default function SetupPage() {
       .replace(/\s+/g, '-')
       .slice(0, 30) + '-' + Math.random().toString(36).slice(2, 6);
 
+    const trialEndsAt = new Date();
+    trialEndsAt.setDate(trialEndsAt.getDate() + 14);
+
     const { error } = await supabase.from('tenants').insert({
       slug,
       name: businessName,
       owner_id: user.id,
       subscription_status: 'trial',
+      trial_ends_at: trialEndsAt.toISOString(),
     });
 
     if (error) {

@@ -6,9 +6,9 @@ import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { QrCode, ChefHat, Package, LogOut, Loader2, BarChart3, Settings, Crown, Zap, Boxes, Lock, AlertTriangle, ArrowRight } from 'lucide-react';
+import { QrCode, ChefHat, Package, LogOut, Loader2, BarChart3, Settings, Crown, Zap, Boxes, Lock, AlertTriangle, ArrowRight, Banknote } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { FREE_PLAN_MAX_ORDERS, FREE_PLAN_ALERT_THRESHOLD, getTodayOrderCount } from '@/lib/data';
+import { FREE_PLAN_MAX_ORDERS, FREE_PLAN_ALERT_THRESHOLD, getTodayOrderCount, getEffectivePlan } from '@/lib/data';
 
 const PLAN_LABELS: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
   gratis: { label: 'Plan Gratis', color: 'bg-muted text-muted-foreground border-border', icon: <Zap className="h-3 w-3" /> },
@@ -17,9 +17,14 @@ const PLAN_LABELS: Record<string, { label: string; color: string; icon: React.Re
   enterprise: { label: 'Plan Enterprise', color: 'bg-purple-500/10 text-purple-400 border-purple-500/20', icon: <Crown className="h-3 w-3" /> },
 };
 
-function PlanBadge({ planId, status }: { planId?: string | null; status?: string | null }) {
-  const plan = PLAN_LABELS[planId || 'gratis'] ?? PLAN_LABELS.gratis;
-  const isActive = !planId || planId === 'gratis' || status === 'active';
+function PlanBadge({ planId, status, trialEndsAt }: { planId?: string | null; status?: string | null; trialEndsAt?: string | null }) {
+  const isTrialActive = status === 'trial' && trialEndsAt && new Date(trialEndsAt) > new Date();
+  const daysLeft = isTrialActive
+    ? Math.ceil((new Date(trialEndsAt!).getTime() - Date.now()) / 86400000)
+    : 0;
+  const effectivePlanId = isTrialActive ? 'starter' : (planId || 'gratis');
+  const plan = PLAN_LABELS[effectivePlanId] ?? PLAN_LABELS.gratis;
+  const isActive = effectivePlanId === 'gratis' || status === 'active' || isTrialActive;
 
   return (
     <div className="flex items-center gap-2 mt-1 sm:mt-0">
@@ -27,7 +32,12 @@ function PlanBadge({ planId, status }: { planId?: string | null; status?: string
         {plan.icon}
         {plan.label}
       </span>
-      {planId && planId !== 'gratis' && (
+      {isTrialActive && (
+        <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border bg-blue-500/10 text-blue-400 border-blue-500/20">
+          Trial · {daysLeft}d
+        </span>
+      )}
+      {!isTrialActive && planId && planId !== 'gratis' && (
         <span className={`inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border ${
           isActive
             ? 'bg-green-500/10 text-green-500 border-green-500/20'
@@ -70,17 +80,20 @@ export default function DashboardPage() {
 
       setTenant(tenantData);
 
-      // Load today's order count for Free plan users
-      if (tenantData && (!tenantData.plan_id || tenantData.plan_id === 'gratis')) {
+      // Load today's order count for Free plan users (trial = starter, so no limit)
+      const effectivePlan = getEffectivePlan(tenantData as any);
+      if (tenantData && effectivePlan === 'gratis') {
         const count = await getTodayOrderCount(tenantData.id);
         setTodayOrders(count);
       }
 
       setLoading(false);
 
-      // Simple Subscription Guard: If not gratis and not active/authorized, warn or redirect
+      // Subscription guard: paid plan that is not active (trial is exempt)
       const td = tenantData as any;
-      if (td && td.plan_id !== 'gratis' && td.subscription_status !== 'active') {
+      const isTrialActive = td?.subscription_status === 'trial' &&
+        td?.trial_ends_at && new Date(td.trial_ends_at) > new Date();
+      if (td && td.plan_id && td.plan_id !== 'gratis' && !isTrialActive && td.subscription_status !== 'active') {
         toast({
           title: '⚠️ Suscripción pendiente',
           description: 'Aún estamos validando tu pago o la suscripción ha caducado.',
@@ -153,12 +166,12 @@ export default function DashboardPage() {
             <p className="text-muted-foreground">
               Administra tu food truck desde aquí.
             </p>
-            <PlanBadge planId={tenant?.plan_id} status={tenant?.subscription_status} />
+            <PlanBadge planId={tenant?.plan_id} status={tenant?.subscription_status} trialEndsAt={tenant?.trial_ends_at} />
           </div>
         </div>
 
         {/* ―― Alert banner: 80% of daily order limit ―― */}
-        {(!tenant?.plan_id || tenant.plan_id === 'gratis') && todayOrders >= FREE_PLAN_ALERT_THRESHOLD && (
+        {tenant && getEffectivePlan(tenant) === 'gratis' && todayOrders >= FREE_PLAN_ALERT_THRESHOLD && (
           <div className="mb-6 relative overflow-hidden flex items-start gap-4 bg-amber-500/10 border border-amber-500/40 rounded-2xl px-5 py-4">
             <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5 shrink-0" />
             <div className="flex-1 min-w-0">
@@ -178,7 +191,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6 mb-10">
           <Link href="/dashboard/menu">
             <Card className="border-border hover:border-primary/40 transition-all hover:-translate-y-1 hover:shadow-lg cursor-pointer group">
               <CardHeader className="pb-3">
@@ -222,7 +235,7 @@ export default function DashboardPage() {
           </Link>
 
           {/* Inventario & Reportes: locked for Free plan */}
-          {(!tenant?.plan_id || tenant.plan_id === 'gratis') ? (
+          {tenant && getEffectivePlan(tenant) === 'gratis' ? (
             <Link href="/#pricing">
               <Card className="relative border-dashed border-border hover:border-amber-500/60 transition-all hover:-translate-y-1 hover:shadow-lg cursor-pointer group h-full opacity-80 hover:opacity-100">
                 <CardHeader className="pb-3">
@@ -253,6 +266,43 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-muted-foreground">Controla tu stock en tiempo real y revisa m&#233;tricas de ventas.</p>
+                </CardContent>
+              </Card>
+            </Link>
+          )}
+
+          {/* Caja: locked for Free plan */}
+          {tenant && getEffectivePlan(tenant) === 'gratis' ? (
+            <Link href="/#pricing">
+              <Card className="relative border-dashed border-border hover:border-amber-500/60 transition-all hover:-translate-y-1 hover:shadow-lg cursor-pointer group h-full opacity-80 hover:opacity-100">
+                <CardHeader className="pb-3">
+                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center mb-2 group-hover:bg-amber-500/20 transition-colors">
+                    <Banknote className="h-6 w-6 text-amber-500" />
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <CardTitle className="text-lg">Caja</CardTitle>
+                    <span className="inline-flex items-center gap-1 bg-amber-500/15 text-amber-400 text-[10px] font-bold px-2 py-0.5 rounded-full border border-amber-500/30 uppercase tracking-wider whitespace-nowrap">
+                      <Lock className="h-2.5 w-2.5" /> Starter
+                    </span>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">Inicio y cierre de caja con arqueo automático y registro de diferencias.</p>
+                  <p className="text-xs text-amber-400 mt-2 font-semibold">Disponible en Starter &#8594;</p>
+                </CardContent>
+              </Card>
+            </Link>
+          ) : (
+            <Link href="/dashboard/caja">
+              <Card className="border-border hover:border-primary/40 transition-all hover:-translate-y-1 hover:shadow-lg cursor-pointer group h-full">
+                <CardHeader className="pb-3">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center mb-2 group-hover:bg-emerald-500/20 transition-colors">
+                    <Banknote className="h-6 w-6 text-emerald-500" />
+                  </div>
+                  <CardTitle className="text-lg">Caja</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">Abre y cierra caja, arqueo automático y revisión de sobrantes/faltantes.</p>
                 </CardContent>
               </Card>
             </Link>

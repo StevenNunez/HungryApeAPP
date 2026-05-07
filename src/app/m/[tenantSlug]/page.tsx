@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
-import { MenuItem as MenuItemType } from '@/lib/types';
+import { MenuItem as MenuItemType, ModifierGroup } from '@/lib/types';
 import { MenuItem } from '@/components/menu/MenuItem';
-import { getMenuItems, subscribeToProducts } from '@/lib/data';
+import { getMenuItems, subscribeToProducts, getProductModifierGroups } from '@/lib/data';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { createClient } from '@/lib/supabase/client';
 
@@ -13,6 +13,7 @@ export default function TenantMenuPage() {
   const tenantSlug = params.tenantSlug as string;
 
   const [menuItems, setMenuItems] = useState<MenuItemType[]>([]);
+  const [modifierGroups, setModifierGroups] = useState<Record<string, ModifierGroup[]>>({});
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [tenantName, setTenantName] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -34,6 +35,12 @@ export default function TenantMenuPage() {
 
       const items = await getMenuItems(tenantSlug);
       setMenuItems(items);
+
+      if (items.length > 0) {
+        const groups = await getProductModifierGroups(items.map(i => i.id));
+        setModifierGroups(groups);
+      }
+
       setLoading(false);
     }
     load();
@@ -86,23 +93,23 @@ export default function TenantMenuPage() {
   return (
     <section>
       {/* Hero heading */}
-      <div className="text-center mb-12">
-        <h1 className="font-brand text-4xl sm:text-6xl lg:text-7xl uppercase leading-tight tracking-wide text-foreground">
+      <div className="text-center mb-6">
+        <h1 className="font-brand text-3xl sm:text-5xl lg:text-6xl uppercase leading-tight tracking-wide text-foreground">
           {tenantName || tenantSlug}
         </h1>
-        <p className="mt-4 text-base text-muted-foreground font-body">
+        <p className="mt-2 text-sm text-muted-foreground font-body">
           Escanea, pide y disfruta 🍌
         </p>
       </div>
 
       {/* Category tabs */}
       <Tabs defaultValue={categories[0]} className="w-full">
-        <TabsList className="flex gap-2 bg-transparent mb-8 flex-wrap justify-center">
+        <TabsList className="flex gap-1.5 bg-transparent mb-4 flex-wrap justify-center sticky top-16 z-10 py-2 bg-background/95 backdrop-blur-sm border-b border-border/40">
           {categories.map(category => (
             <TabsTrigger
               key={category}
               value={category}
-              className="rounded-full px-5 py-2 text-sm border border-border text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md transition-all duration-200 hover:border-primary/50"
+              className="rounded-full px-3 py-1.5 text-xs border border-border text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md transition-all duration-200 hover:border-primary/50"
             >
               {category}
             </TabsTrigger>
@@ -111,9 +118,9 @@ export default function TenantMenuPage() {
 
         {categories.map(category => (
           <TabsContent key={category} value={category}>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {(category === 'Todo el Menú' ? menuItems : menuItems.filter(item => item.category === category)).map(item => (
-                <MenuItem key={item.id} item={item} />
+                <MenuItem key={item.id} item={item} groups={modifierGroups[item.id] || []} />
               ))}
             </div>
           </TabsContent>
