@@ -51,6 +51,7 @@ export interface CartItem extends MenuItem {
 
 export type OrderStatus = 'Por Pagar' | 'Pendiente' | 'En preparación' | 'Listo' | 'Entregado';
 export type PaymentMethod = 'cash' | 'transfer' | 'card' | 'qr';
+export type OrderType = 'aqui' | 'llevar';
 
 export interface Order {
   id: string;
@@ -60,6 +61,7 @@ export interface Order {
   total: number;
   status: OrderStatus;
   paymentMethod: PaymentMethod;
+  orderType: OrderType;
   /** 4-character alphanumeric code used to verify pickup identity */
   pickupCode: string;
   /** Sequential daily ticket number (e.g. 1, 2, 3) */
@@ -127,6 +129,7 @@ export function mapOrderRow(row: any, items: CartItem[]): Order {
     paymentMethod: row.payment_method as PaymentMethod,
     pickupCode: row.pickup_code,
     shortId: row.short_id,
+    orderType: (row.order_type as OrderType) ?? 'aqui',
     createdAt: new Date(row.created_at),
     transferDetails: row.tenants ? {
       bank: row.tenants.transfer_bank || '',

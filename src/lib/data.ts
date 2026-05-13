@@ -1,5 +1,5 @@
 import { createClient } from '@/lib/supabase/client';
-import type { MenuItem, Order, CartItem, ModifierGroup, PaymentMethod, OrderStatus } from './types';
+import type { MenuItem, Order, CartItem, ModifierGroup, PaymentMethod, OrderStatus, OrderType } from './types';
 import { mapProductRow, mapOrderRow, mapModifierGroupRow } from './types';
 import { generatePickupCode } from './utils';
 
@@ -123,6 +123,7 @@ export async function createOrder(
   items: CartItem[],
   total: number,
   paymentMethod: PaymentMethod,
+  orderType: OrderType = 'aqui',
 ): Promise<{ id: string; pickupCode: string; shortId?: number }> {
   const supabase = createClient();
   const pickupCode = generatePickupCode();
@@ -154,9 +155,10 @@ export async function createOrder(
       nickname,
       pickup_code: pickupCode,
       payment_method: paymentMethod,
+      order_type: orderType,
       total,
       status: 'Por Pagar',
-    })
+    } as any)
     .select('id, short_id')
     .single();
 
@@ -284,11 +286,20 @@ export async function getOrdersByTenant(tenantSlug: string = DEMO_TENANT_SLUG): 
 
   if (!tenant) return [];
 
-  const { data: orderRows, error } = await supabase
+  let query = supabase
     .from('orders')
     .select('*')
     .eq('tenant_id', tenant.id)
     .order('created_at', { ascending: true });
+
+  // Para la demo: solo mostrar pedidos de las últimas 2 horas
+  // Los pedidos viejos se borran en /api/demo/cleanup, pero esto es defensa adicional
+  if (tenantSlug === DEMO_TENANT_SLUG) {
+    const since = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    query = query.gte('created_at', since);
+  }
+
+  const { data: orderRows, error } = await query;
 
   if (error || !orderRows) return [];
 
@@ -342,14 +353,20 @@ export async function getOrdersByTenant(tenantSlug: string = DEMO_TENANT_SLUG): 
 export async function updateOrderStatus(orderId: string, newStatus: OrderStatus): Promise<void> {
   const supabase = createClient();
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('orders')
     .update({ status: newStatus })
-    .eq('id', orderId);
+    .eq('id', orderId)
+    .select('id');
 
   if (error) {
     console.error('Error updating order status:', error);
     throw error;
+  }
+
+  // If RLS silently blocked the update, data will be empty (0 rows affected)
+  if (!data || data.length === 0) {
+    throw new Error('RLS_BLOCKED: update returned 0 rows — check demo RLS policy (migration 010)');
   }
 }
 
@@ -384,19 +401,22 @@ export function subscribeToOrders(
   };
 }
 
-/** Subscribe to changes on a single order (for customer order status page). */
-export function subscribeToOrder(
+/** Subscribe to changes on a single order via tenant-level filter (more reliable than id filter). */
+export function subscribeToOrderStatus(
+  tenantId: string,
   orderId: string,
   onUpdate: (order: any) => void,
 ) {
   const supabase = createClient();
 
   const channel = supabase
-    .channel(`order-${orderId}`)
+    .channel(`order-status-${orderId}`)
     .on(
       'postgres_changes',
-      { event: 'UPDATE', schema: 'public', table: 'orders', filter: `id=eq.${orderId}` },
-      (payload) => onUpdate(payload.new),
+      { event: 'UPDATE', schema: 'public', table: 'orders', filter: `tenant_id=eq.${tenantId}` },
+      (payload) => {
+        if (payload.new?.id === orderId) onUpdate(payload.new);
+      },
     )
     .subscribe();
 

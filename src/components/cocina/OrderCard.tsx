@@ -3,7 +3,7 @@
 import { Order, OrderStatus } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Check, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Check, ShieldCheck, UtensilsCrossed, ShoppingBag } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -36,16 +36,32 @@ export function OrderCard({ order, onStatusChange }: OrderCardProps) {
     qr: '📲 QR/App'
   };
 
+  const isLlevar = order.orderType === 'llevar';
+
   return (
     <Card className={`shadow-md animate-in fade-in-50 transition-all ${
       isReady ? 'border-accent border-2 shadow-lg' : isPaying ? 'border-red-400 border-2 shadow-lg' : 'bg-card'
     }`}>
+      {/* Order type banner */}
+      <div className={`flex items-center gap-2 px-4 py-2 text-xs font-bold uppercase tracking-wider ${
+        isLlevar
+          ? 'bg-blue-500/15 text-blue-600 dark:text-blue-400'
+          : 'bg-green-500/15 text-green-600 dark:text-green-400'
+      }`}>
+        {isLlevar
+          ? <><ShoppingBag className="h-3.5 w-3.5" /> Para llevar</>
+          : <><UtensilsCrossed className="h-3.5 w-3.5" /> Comer aquí</>
+        }
+      </div>
+
       <CardHeader className="pb-2">
-        <CardTitle className="flex justify-between items-center">
-          <span className="font-brand text-lg tracking-wide">{order.nickname}</span>
-          <span className="text-sm font-medium text-muted-foreground uppercase tracking-widest text-[10px]">
-            {order.shortId ? `PEDIDO #${order.shortId}` : `#${order.id.slice(0, 8)}`}
-          </span>
+        <CardTitle className="flex flex-col gap-0.5">
+          <div className="flex justify-between items-center gap-2">
+            <span className="font-brand text-lg tracking-wide truncate min-w-0">{order.nickname}</span>
+            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider shrink-0 bg-muted px-2 py-0.5 rounded-md whitespace-nowrap">
+              {order.shortId ? `#${order.shortId}` : `#${order.id.slice(0, 6)}`}
+            </span>
+          </div>
         </CardTitle>
         <CardDescription className="flex justify-between items-center">
           <span>{formatDistanceToNow(order.createdAt, { addSuffix: true, locale: es })}</span>

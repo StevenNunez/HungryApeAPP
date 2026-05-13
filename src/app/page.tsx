@@ -140,7 +140,7 @@ export default async function LandingPage() {
               href={user ? '/dashboard' : '#pricing'}
               className="inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-8 py-4 rounded-2xl text-lg font-bold hover:bg-primary/90 transition-all active:scale-95 shadow-xl ha-glow-red"
             >
-              {user ? 'Ir a mi Food Truck' : 'Comenzar Gratis'}
+              {user ? 'Ir a mi Food Truck' : 'Empezar 14 días gratis'}
               <ArrowRight className="h-5 w-5" />
             </Link>
             <Link
@@ -154,9 +154,9 @@ export default async function LandingPage() {
           {/* Value props */}
           <div className="mt-16 flex flex-wrap justify-center gap-8 sm:gap-12">
             {[
-              { value: '$0', label: 'Para empezar' },
+              { value: '$4.990', label: 'Plan Básico / mes' },
               { value: '0%', label: 'Comisión por pedido' },
-              { value: '14', label: 'Días de Starter gratis' },
+              { value: '14', label: 'Días gratis al empezar' },
               { value: '∞', label: 'Pedidos en Starter' },
             ].map(stat => (
               <div key={stat.label} className="text-center">
@@ -380,9 +380,9 @@ export default async function LandingPage() {
                 <Clock className="h-7 w-7 text-primary" />
               </div>
               <div>
-                <h3 className="font-brand text-2xl uppercase tracking-wide">14 días de Starter gratis</h3>
+                <h3 className="font-brand text-2xl uppercase tracking-wide">14 días gratis, sin tarjeta</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Caja, reportes, inventario ilimitado — sin tarjeta, sin compromiso. Al vencer, sigues gratis con el plan básico.
+                  Menú digital, cocina en tiempo real y pedidos personalizados — sin compromiso. Después, solo $4.990/mes.
                 </p>
               </div>
             </div>
@@ -390,7 +390,7 @@ export default async function LandingPage() {
               href={user ? '/dashboard' : '#pricing'}
               className="shrink-0 inline-flex items-center gap-2 bg-primary text-primary-foreground px-8 py-3.5 rounded-2xl font-bold hover:bg-primary/90 transition-all active:scale-95 shadow-lg whitespace-nowrap"
             >
-              Probar gratis <ArrowRight className="h-4 w-4" />
+              Empezar gratis <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
         </div>
@@ -418,7 +418,7 @@ export default async function LandingPage() {
               href={user ? '/dashboard' : '#pricing'}
               className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-10 py-4 rounded-2xl text-lg font-bold hover:bg-primary/90 transition-all active:scale-95 shadow-xl ha-glow-red"
             >
-              Comenzar Gratis
+              Empezar 14 días gratis
               <ArrowRight className="h-5 w-5" />
             </Link>
             <Link

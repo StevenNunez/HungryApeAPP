@@ -3,12 +3,12 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { Order, OrderStatus as OrderStatusType } from '@/lib/types';
-import { getOrderById, subscribeToOrder } from '@/lib/data';
+import { getOrderById, subscribeToOrderStatus } from '@/lib/data';
 import { Card, CardContent } from '@/components/ui/card';
 import { Clock, CookingPot, PackageCheck, ShieldCheck, Banknote, CreditCard, ArrowRight, Smartphone, AlertCircle } from 'lucide-react';
 import { formatCLP } from '@/lib/utils';
 
-const statusSteps: OrderStatusType[] = ['Pendiente', 'En preparación', 'Listo'];
+const statusSteps: OrderStatusType[] = ['Por Pagar', 'Pendiente', 'En preparación', 'Listo'];
 
 const statusInfo: Record<OrderStatusType, { icon: any; text: string; color: string; bgColor: string }> = {
   'Por Pagar': {
@@ -64,24 +64,18 @@ export function OrderStatus({ orderId }: { orderId: string }) {
     });
   }, [orderId, pickupCodeFromUrl]);
 
-  // Realtime subscription — auto-update when kitchen changes status
+  // Realtime subscription — set up once we know the tenantId (from loaded order)
+  // Uses tenant_id filter (same proven pattern as kitchen) and matches orderId client-side
   useEffect(() => {
-    if (!orderId || !order) return;
+    if (!order?.tenantId) return;
 
-    console.log(`🦍 Subscribing to order tracking: ${orderId}`);
-
-    const unsubscribe = subscribeToOrder(orderId, (updatedRow) => {
-      console.log('📦 Status update received:', updatedRow.status);
-      
+    const unsubscribe = subscribeToOrderStatus(order.tenantId, orderId, (updatedRow) => {
       const newStatus = updatedRow.status as OrderStatusType;
-      
       setOrder(prev => {
         if (!prev) return null;
         return { ...prev, status: newStatus };
       });
-
       if (newStatus === 'Listo') {
-        // Notification sound could be added here
         toast({
           title: '🔥 ¡TU PEDIDO ESTÁ LISTO!',
           description: 'Acércate a caja con tu código para retirar.',
@@ -91,7 +85,22 @@ export function OrderStatus({ orderId }: { orderId: string }) {
     });
 
     return unsubscribe;
-  }, [orderId, order?.id, toast]);
+  }, [order?.tenantId, orderId, toast]);
+
+  // Polling fallback: re-fetches every 2s in case realtime misses an event
+  useEffect(() => {
+    if (!orderId) return;
+    const interval = setInterval(async () => {
+      const fresh = await getOrderById(orderId);
+      if (fresh) {
+        setOrder(prev => {
+          if (!prev || prev.status === fresh.status) return prev;
+          return { ...prev, status: fresh.status };
+        });
+      }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [orderId]);
 
   if (loading) {
     return (
@@ -113,7 +122,9 @@ export function OrderStatus({ orderId }: { orderId: string }) {
     );
   }
 
-  const currentStatusIndex = statusSteps.indexOf(order.status);
+  const currentStatusIndex = order.status === 'Entregado'
+    ? statusSteps.length
+    : statusSteps.indexOf(order.status);
   const currentStatus = statusInfo[order.status];
   const Icon = currentStatus.icon;
   const isReady = order.status === 'Listo';
@@ -249,65 +260,59 @@ export function OrderStatus({ orderId }: { orderId: string }) {
         </CardContent>
       </Card>
 
-      {/* ── Status or Payment Instruction ── */}
+      {/* ── Progress stepper — always visible ── */}
+      <Card>
+        <CardContent className="py-5 px-4">
+          <div className="flex items-start">
+            {statusSteps.map((step, index) => {
+              const StepIcon = statusInfo[step].icon;
+              const isActive = index <= currentStatusIndex;
+              const isCurrent = index === currentStatusIndex;
+              const isLast = index === statusSteps.length - 1;
+              return (
+                <div key={step} className="flex items-center flex-1 min-w-0">
+                  <div className="flex flex-col items-center gap-1.5 shrink-0 w-12">
+                    <div className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all duration-500 z-10 ${
+                      isCurrent
+                        ? 'bg-primary border-primary text-primary-foreground scale-110 shadow-lg'
+                        : isActive
+                        ? 'bg-primary/80 border-primary text-primary-foreground'
+                        : 'bg-muted border-border text-muted-foreground'
+                    }`}>
+                      <StepIcon className="w-4 h-4" />
+                    </div>
+                    <span className={`text-[9px] font-bold text-center leading-tight px-0.5 ${
+                      isActive ? 'text-primary' : 'text-muted-foreground'
+                    }`}>
+                      {step}
+                    </span>
+                  </div>
+                  {!isLast && (
+                    <div className={`flex-1 h-0.5 mb-5 mx-0.5 transition-colors duration-500 ${
+                      isActive && index < currentStatusIndex ? 'bg-primary' : 'bg-border'
+                    }`} />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Status card or Payment Instructions ── */}
       {isPaying ? (
         renderPaymentInstructions()
       ) : (
-        <>
-          <Card>
-            <CardContent className="py-6">
-              <div className="flex flex-col items-center gap-4">
-                <div className={`w-20 h-20 rounded-full flex items-center justify-center ${currentStatus.bgColor}/15`}>
-                  <Icon className={`w-10 h-10 ${currentStatus.color} transition-all duration-500`} />
-                </div>
-                <p className="text-center font-semibold text-lg">{currentStatus.text}</p>
+        <Card>
+          <CardContent className="py-6">
+            <div className="flex flex-col items-center gap-4">
+              <div className={`w-20 h-20 rounded-full flex items-center justify-center ${currentStatus.bgColor}/15`}>
+                <Icon className={`w-10 h-10 ${currentStatus.color} transition-all duration-500`} />
               </div>
-            </CardContent>
-          </Card>
-
-          {/* ── Progress stepper ── */}
-          <Card>
-            <CardContent className="py-6">
-              <div className="flex items-center justify-between px-2">
-                {statusSteps.map((step, index) => {
-                  const StepIcon = statusInfo[step].icon;
-                  const isActive = index <= currentStatusIndex;
-                  const isCurrent = index === currentStatusIndex;
-                  return (
-                    <div key={step} className="flex flex-col items-center gap-2 relative">
-                      {index > 0 && (
-                        <div
-                          className={`absolute top-5 h-0.5 transition-colors duration-500 ${
-                            isActive ? 'bg-primary' : 'bg-border'
-                          }`}
-                          style={{ width: '60px', left: '-45px' }}
-                        />
-                      )}
-                      <div
-                        className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-500 z-10 ${
-                          isCurrent
-                            ? 'bg-primary border-primary text-primary-foreground scale-110 shadow-lg'
-                            : isActive
-                            ? 'bg-primary/80 border-primary text-primary-foreground'
-                            : 'bg-muted border-border text-muted-foreground'
-                        }`}
-                      >
-                        <StepIcon className="w-5 h-5" />
-                      </div>
-                      <span
-                        className={`text-xs font-medium text-center ${
-                          isActive ? 'text-primary' : 'text-muted-foreground'
-                        }`}
-                      >
-                        {step}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </CardContent>
-          </Card>
-        </>
+              <p className="text-center font-semibold text-lg">{currentStatus.text}</p>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* ── Reminder ── */}

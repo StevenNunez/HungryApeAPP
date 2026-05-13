@@ -94,12 +94,15 @@ function LoginForm() {
           // Add a random suffix to avoid slug collisions
           const uniqueSlug = `${slug}-${Math.random().toString(36).slice(2, 6)}`;
 
+          const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
           const { error: tenantError } = await supabase
             .from('tenants')
             .insert({
               slug: uniqueSlug,
               name: businessName,
               owner_id: authData.user.id,
+              subscription_status: 'trial',
+              trial_ends_at: trialEndsAt,
             });
 
           if (tenantError) {

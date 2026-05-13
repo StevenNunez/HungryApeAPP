@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ShoppingCart, Trash2, Plus, Minus, ArrowRight, Banknote, CreditCard, Smartphone, CheckCircle2, Loader2, Store } from 'lucide-react';
+import { ShoppingCart, Trash2, Plus, Minus, ArrowRight, Banknote, CreditCard, Smartphone, CheckCircle2, Loader2, Store, UtensilsCrossed, ShoppingBag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetFooter } from '@/components/ui/sheet';
 import { useCart } from '@/hooks/useCart';
 import { formatCLP } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { createOrder as supabaseCreateOrder, getEffectivePlan } from '@/lib/data';
+import type { OrderType } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -58,6 +59,7 @@ export function Cart() {
     const [open, setOpen] = useState(false);
     const [step, setStep] = useState<Step>('cart');
     const [nickname, setNickname] = useState('');
+    const [orderType, setOrderType] = useState<OrderType>('aqui');
     const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null);
     const [isConfirming, setIsConfirming] = useState(false);
     const [tenantPlan, setTenantPlan] = useState<string>('gratis');
@@ -97,6 +99,7 @@ export function Cart() {
     const reset = () => {
         setStep('cart');
         setNickname('');
+        setOrderType('aqui');
         setSelectedPayment(null);
         setIsConfirming(false);
     };
@@ -130,7 +133,7 @@ export function Cart() {
         setIsConfirming(true);
 
         try {
-            const order = await supabaseCreateOrder(tenantSlug, nickname, cartItems, cartTotal, selectedPayment);
+            const order = await supabaseCreateOrder(tenantSlug, nickname, cartItems, cartTotal, selectedPayment, orderType);
 
             toast({
                 title: '¡Pedido enviado a cocina! 🍳',
@@ -286,6 +289,38 @@ export function Cart() {
                         {cartItems.length > 0 && (
                             <div className="border-t border-border px-6 py-6 space-y-5 bg-card/5 shadow-[0_-8px_24px_rgba(0,0,0,0.05)]">
                                 <div className="space-y-3">
+                                    {/* Tipo de pedido */}
+                                    <div>
+                                        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 pl-1">¿Cómo lo quieres?</p>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setOrderType('aqui')}
+                                                className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 transition-all font-semibold text-sm ${
+                                                    orderType === 'aqui'
+                                                        ? 'border-primary bg-primary/8 text-primary'
+                                                        : 'border-border bg-card text-muted-foreground hover:border-primary/40'
+                                                }`}
+                                            >
+                                                <UtensilsCrossed className="h-5 w-5" />
+                                                <span>Comer aquí</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setOrderType('llevar')}
+                                                className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 transition-all font-semibold text-sm ${
+                                                    orderType === 'llevar'
+                                                        ? 'border-primary bg-primary/8 text-primary'
+                                                        : 'border-border bg-card text-muted-foreground hover:border-primary/40'
+                                                }`}
+                                            >
+                                                <ShoppingBag className="h-5 w-5" />
+                                                <span>Para llevar</span>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    {/* Apodo */}
                                     <div className="relative">
                                         <Store className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                         <Input

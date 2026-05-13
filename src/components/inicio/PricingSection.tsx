@@ -9,16 +9,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const plans = [
   {
-    id: 'gratis',
-    name: 'Gratis',
-    priceMonthly: '$0',
-    priceAnnual: '$0',
+    id: 'basico',
+    name: 'Básico',
+    priceMonthly: '$4.990',
+    priceAnnual: '$3.992',
     period: '/mes',
-    cancelText: 'Sin tarjeta de crédito',
-    description: 'Para empezar a digitalizarte hoy. Incluye 14 días de Starter gratis al registrarte.',
-    badge: '14 días Starter gratis 🎉',
+    cancelText: '14 días gratis · Sin tarjeta',
+    description: 'Todo lo que necesitas para digitalizar tu food truck. Empieza gratis hoy.',
+    badge: '14 días gratis 🎉',
     features: [
-      'Menú digital (hasta 15 productos)',
+      'Menú digital ilimitado',
       'Código QR personalizado',
       'Pedidos personalizados (salsas, extras, punto de cocción)',
       'Cocina en tiempo real',
@@ -26,7 +26,7 @@ const plans = [
       'Pagos: Efectivo y Transferencia',
       'Código de retiro seguro',
     ],
-    cta: 'Crear cuenta gratis',
+    cta: 'Empezar 14 días gratis',
     popular: false,
   },
   {
@@ -39,7 +39,7 @@ const plans = [
     description: 'Para el food truck que ya vende y necesita control total de su operación.',
     badge: null,
     features: [
-      'Todo lo de Gratis, sin límite de pedidos',
+      'Todo lo de Básico, sin límite de pedidos',
       'Hasta 100 productos en el menú',
       'Caja: inicio, cierre y arqueo automático',
       'Egresos de caja (proveedores, gastos)',
@@ -124,7 +124,7 @@ export function PricingSection() {
   }
 
   const handleOpenModal = async (plan: any) => {
-    if (plan.id === 'gratis') {
+    if (plan.id === 'basico') {
       if (user) {
         router.push('/dashboard');
       } else {

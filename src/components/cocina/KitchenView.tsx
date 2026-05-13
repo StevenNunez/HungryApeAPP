@@ -19,9 +19,10 @@ const columnColors: Record<OrderStatus, string> = {
 
 interface KitchenViewProps {
   tenantSlug: string;
+  compact?: boolean;
 }
 
-export function KitchenView({ tenantSlug }: KitchenViewProps) {
+export function KitchenView({ tenantSlug, compact = false }: KitchenViewProps) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [tenantId, setTenantId] = useState<string | null>(null);
@@ -133,7 +134,7 @@ export function KitchenView({ tenantSlug }: KitchenViewProps) {
   return (
     <div className="space-y-12 animate-in fade-in duration-500 pb-20">
       {/* ── Active Kitchen Board (Main columns) ── */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-start">
+      <div className={`grid gap-6 items-start ${compact ? 'grid-cols-2' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'}`}>
         {mainColumns.map(status => {
           const statusOrders = orders.filter(o => o.status === status);
           const orderCount = statusOrders.length;
@@ -179,7 +180,7 @@ export function KitchenView({ tenantSlug }: KitchenViewProps) {
             <h2 className="font-brand text-2xl uppercase tracking-wider text-muted-foreground">Últimos Entregados</h2>
             <span className="text-xs font-bold text-muted-foreground bg-muted px-3 py-1 rounded-full">Max 10 result.</span>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+          <div className={`grid gap-4 ${compact ? 'grid-cols-2 sm:grid-cols-3' : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5'}`}>
             {entregados.reverse().map(order => (
               <div key={order.id} className="opacity-70 hover:opacity-100 transition-opacity grayscale hover:grayscale-0">
                 <OrderCard order={order} onStatusChange={handleStatusChange} />

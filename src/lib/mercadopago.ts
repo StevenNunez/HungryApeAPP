@@ -17,6 +17,15 @@ export const mercadoPagoClient = new MercadoPagoConfig({
  * Annual flow   → Checkout Pro (one-time payment, total = priceAnnualPerMonth * 12)
  */
 export const SUBSCRIPTION_PLANS = {
+  basico: {
+    id: 'basico',
+    name: 'Básico',
+    currency: 'CLP',
+    priceMonthly: 4990,
+    priceAnnualPerMonth: 3992,
+    get priceAnnualTotal() { return this.priceAnnualPerMonth * 12; }, // 47904
+    description: 'Hungry Ape Básico — Menú digital + QR + Cocina en tiempo real',
+  },
   starter: {
     id: 'starter',
     name: 'Starter',

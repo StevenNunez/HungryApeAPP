@@ -104,17 +104,19 @@ export default function TenantMenuPage() {
 
       {/* Category tabs */}
       <Tabs defaultValue={categories[0]} className="w-full">
-        <TabsList className="flex gap-1.5 bg-transparent mb-4 flex-wrap justify-center sticky top-16 z-10 py-2 bg-background/95 backdrop-blur-sm border-b border-border/40">
-          {categories.map(category => (
-            <TabsTrigger
-              key={category}
-              value={category}
-              className="rounded-full px-3 py-1.5 text-xs border border-border text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md transition-all duration-200 hover:border-primary/50"
-            >
-              {category}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div className="sticky top-16 z-10 bg-background/95 backdrop-blur-sm border-b border-border/40">
+          <TabsList className="flex gap-1.5 bg-transparent py-2 w-full overflow-x-auto scrollbar-none px-1 justify-start">
+            {categories.map(category => (
+              <TabsTrigger
+                key={category}
+                value={category}
+                className="shrink-0 rounded-full px-3 py-1.5 text-xs border border-border text-muted-foreground data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:border-primary data-[state=active]:shadow-md transition-all duration-200 hover:border-primary/50"
+              >
+                {category}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </div>
 
         {categories.map(category => (
           <TabsContent key={category} value={category}>

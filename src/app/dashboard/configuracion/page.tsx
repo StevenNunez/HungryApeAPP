@@ -6,9 +6,10 @@ import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Loader2, ArrowLeft, Save, Image as ImageIcon, Store } from 'lucide-react';
+import { Loader2, ArrowLeft, Save, Image as ImageIcon, Store, CreditCard, AlertTriangle, CheckCircle2, Clock, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
+import { getEffectivePlan } from '@/lib/data';
 
 export default function ConfigurationPage() {
   const router = useRouter();
@@ -16,6 +17,8 @@ export default function ConfigurationPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [tenant, setTenant] = useState<any>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const [confirmCancel, setConfirmCancel] = useState(false);
 
   useEffect(() => {
     async function loadData() {
@@ -66,6 +69,22 @@ export default function ConfigurationPage() {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
     } else {
       toast({ title: 'Perfil actualizado', description: 'Tus datos se guardaron correctamente.' });
+    }
+  };
+
+  const handleCancelSubscription = async () => {
+    setCancelling(true);
+    try {
+      const res = await fetch('/api/subscription/cancel', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al cancelar');
+      setTenant((prev: any) => ({ ...prev, subscription_status: 'cancelled' }));
+      setConfirmCancel(false);
+      toast({ title: 'Suscripción cancelada', description: 'Tu acceso continúa hasta que termine el período pagado.' });
+    } catch (err: any) {
+      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+    } finally {
+      setCancelling(false);
     }
   };
 
@@ -203,7 +222,180 @@ export default function ConfigurationPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* ── Suscripción ── */}
+        <SubscriptionCard
+          tenant={tenant}
+          confirmCancel={confirmCancel}
+          setConfirmCancel={setConfirmCancel}
+          cancelling={cancelling}
+          onCancel={handleCancelSubscription}
+        />
       </div>
     </div>
+  );
+}
+
+// ─── Subscription card component ─────────────────────────────────────────────
+
+const PLAN_LABELS: Record<string, string> = {
+  basico: 'Plan Básico',
+  starter: 'Plan Starter',
+  pro: 'Plan Pro',
+  enterprise: 'Plan Enterprise',
+  gratis: 'Plan Gratis',
+};
+
+function SubscriptionCard({
+  tenant,
+  confirmCancel,
+  setConfirmCancel,
+  cancelling,
+  onCancel,
+}: {
+  tenant: any;
+  confirmCancel: boolean;
+  setConfirmCancel: (v: boolean) => void;
+  cancelling: boolean;
+  onCancel: () => void;
+}) {
+  const effectivePlan = getEffectivePlan(tenant);
+  const status: string = tenant.subscription_status || 'trial';
+  const trialEndsAt: string | null = tenant.trial_ends_at ?? null;
+
+  const isTrial = status === 'trial';
+  const isActive = status === 'active';
+  const isCancelled = status === 'cancelled';
+
+  const trialDaysLeft = trialEndsAt
+    ? Math.max(0, Math.ceil((new Date(trialEndsAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+    : null;
+
+  const trialExpired = isTrial && trialDaysLeft !== null && trialDaysLeft === 0;
+
+  const statusConfig = isCancelled
+    ? { label: 'Cancelada', icon: XCircle, color: 'text-red-500', bg: 'bg-red-500/10 border-red-500/30' }
+    : trialExpired
+    ? { label: 'Prueba vencida', icon: AlertTriangle, color: 'text-amber-500', bg: 'bg-amber-500/10 border-amber-500/30' }
+    : isTrial
+    ? { label: `Prueba gratuita · ${trialDaysLeft} días restantes`, icon: Clock, color: 'text-blue-500', bg: 'bg-blue-500/10 border-blue-500/30' }
+    : { label: 'Activa', icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10 border-green-500/30' };
+
+  const StatusIcon = statusConfig.icon;
+
+  return (
+    <Card className="rounded-[2.5rem] border-transparent shadow-xl bg-card overflow-hidden">
+      <CardHeader className="bg-muted/50 p-8 border-b border-border">
+        <div className="flex items-center gap-3">
+          <CreditCard className="h-5 w-5 text-primary" />
+          <CardTitle className="text-xl font-brand uppercase text-primary">Suscripción</CardTitle>
+        </div>
+        <CardDescription>Gestiona tu plan y opciones de facturación.</CardDescription>
+      </CardHeader>
+
+      <CardContent className="p-8 space-y-6">
+        {/* Plan + Status */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Plan actual</p>
+            <p className="font-brand text-2xl uppercase tracking-wide">
+              {PLAN_LABELS[effectivePlan] ?? effectivePlan}
+            </p>
+          </div>
+          <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border text-sm font-bold ${statusConfig.bg} ${statusConfig.color}`}>
+            <StatusIcon className="h-4 w-4" />
+            {statusConfig.label}
+          </div>
+        </div>
+
+        {/* Trial info */}
+        {isTrial && !trialExpired && trialDaysLeft !== null && (
+          <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 text-sm text-blue-700 dark:text-blue-300">
+            <p className="font-bold mb-1">Tu período de prueba termina en {trialDaysLeft} día{trialDaysLeft !== 1 ? 's' : ''}.</p>
+            <p className="text-muted-foreground text-xs">
+              Vence el {new Date(trialEndsAt!).toLocaleDateString('es-CL', { day: 'numeric', month: 'long', year: 'numeric' })}.
+              Para continuar usando Hungry Ape, activa tu plan desde la sección de precios.
+            </p>
+          </div>
+        )}
+
+        {trialExpired && (
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-sm">
+            <p className="font-bold text-amber-600 mb-1">Tu prueba ha vencido.</p>
+            <p className="text-muted-foreground text-xs">Activa tu plan para seguir recibiendo pedidos.</p>
+          </div>
+        )}
+
+        {isCancelled && (
+          <div className="bg-red-500/10 border border-red-500/20 rounded-2xl p-4 text-sm text-red-700 dark:text-red-300">
+            <p className="font-bold mb-1">Suscripción cancelada.</p>
+            <p className="text-muted-foreground text-xs">Tu acceso continúa hasta que termine el período ya pagado. Puedes volver a suscribirte cuando quieras.</p>
+          </div>
+        )}
+
+        {/* Upgrade CTA for trial or cancelled */}
+        {(isTrial || isCancelled) && (
+          <Link href="/#pricing">
+            <Button className="rounded-2xl h-12 px-8 font-bold gap-2 w-full sm:w-auto">
+              Ver planes y precios →
+            </Button>
+          </Link>
+        )}
+
+        {/* Cancel section — only if active */}
+        {isActive && (
+          <div className="border-t border-border pt-6">
+            {!confirmCancel ? (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-bold">Cancelar suscripción</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Puedes cancelar cuando quieras. Tu acceso continúa hasta el fin del período pagado.
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  className="rounded-xl border-red-300 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 hover:border-red-400 shrink-0"
+                  onClick={() => setConfirmCancel(true)}
+                >
+                  <XCircle className="h-4 w-4 mr-2" />
+                  Cancelar suscripción
+                </Button>
+              </div>
+            ) : (
+              <div className="bg-red-500/10 border-2 border-red-500/30 rounded-2xl p-6 space-y-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-red-600">¿Confirmas la cancelación?</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Tu suscripción se cancelará de inmediato en Mercado Pago. Seguirás teniendo acceso hasta que termine el período ya pagado.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1 rounded-xl"
+                    onClick={() => setConfirmCancel(false)}
+                    disabled={cancelling}
+                  >
+                    No, mantener
+                  </Button>
+                  <Button
+                    className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 text-white"
+                    onClick={onCancel}
+                    disabled={cancelling}
+                  >
+                    {cancelling ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
+                    Sí, cancelar
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
