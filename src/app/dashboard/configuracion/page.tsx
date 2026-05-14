@@ -10,6 +10,7 @@ import { Loader2, ArrowLeft, Save, Image as ImageIcon, Store, CreditCard, AlertT
 import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { getEffectivePlan } from '@/lib/data';
+import { ImageUploader } from '@/components/ui/image-uploader';
 
 export default function ConfigurationPage() {
   const router = useRouter();
@@ -156,16 +157,15 @@ export default function ConfigurationPage() {
 
               <div className="space-y-5">
                 <div>
-                  <label className="text-sm font-bold uppercase pl-1 block mb-1.5">URL del Logo</label>
-                  <div className="relative">
-                    <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      value={tenant.logo_url || ''}
-                      onChange={e => setTenant({ ...tenant, logo_url: e.target.value })}
-                      placeholder="https://..."
-                      className="rounded-xl h-12 pl-9"
-                    />
-                  </div>
+                  <label className="text-sm font-bold uppercase pl-1 block mb-1.5">Logo del negocio</label>
+                  <ImageUploader
+                    value={tenant.logo_url}
+                    onChange={url => setTenant({ ...tenant, logo_url: url })}
+                    uploadPath={`${tenant.id}/logo`}
+                    aspectRatio="square"
+                    maxWidth={400}
+                    placeholder="Subir logo"
+                  />
                 </div>
                 <div>
                   <label className="text-sm font-bold uppercase pl-1 block mb-1.5">WhatsApp de contacto</label>
@@ -243,7 +243,7 @@ const PLAN_LABELS: Record<string, string> = {
   starter: 'Plan Starter',
   pro: 'Plan Pro',
   enterprise: 'Plan Enterprise',
-  gratis: 'Plan Gratis',
+  gratis: 'Sin plan activo',
 };
 
 function SubscriptionCard({

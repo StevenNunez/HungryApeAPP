@@ -16,7 +16,7 @@ const features = [
     icon: SlidersHorizontal,
     title: 'Pedidos Personalizados',
     description: 'El cliente elige salsas, extras y ajustes al pedir. La cocina ve cada detalle en el ticket: sin palta, bien cocido, mayonesa.',
-    badge: 'Nuevo',
+
   },
   {
     icon: ChefHat,
@@ -37,7 +37,7 @@ const features = [
     icon: Banknote,
     title: 'Caja y Arqueo',
     description: 'Abre caja con monto inicial, registra egresos y al cerrar el sistema calcula el arqueo automáticamente.',
-    badge: 'Nuevo',
+
   },
   {
     icon: BarChart3,
@@ -137,7 +137,7 @@ export default async function LandingPage() {
 
           <div className="mt-10 flex flex-col sm:flex-row gap-4 justify-center">
             <Link
-              href={user ? '/dashboard' : '#pricing'}
+              href={user ? '/dashboard' : '/login?mode=signup'}
               className="inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-8 py-4 rounded-2xl text-lg font-bold hover:bg-primary/90 transition-all active:scale-95 shadow-xl ha-glow-red"
             >
               {user ? 'Ir a mi Food Truck' : 'Empezar 14 días gratis'}
@@ -387,7 +387,7 @@ export default async function LandingPage() {
               </div>
             </div>
             <Link
-              href={user ? '/dashboard' : '#pricing'}
+              href={user ? '/dashboard' : '/login?mode=signup'}
               className="shrink-0 inline-flex items-center gap-2 bg-primary text-primary-foreground px-8 py-3.5 rounded-2xl font-bold hover:bg-primary/90 transition-all active:scale-95 shadow-lg whitespace-nowrap"
             >
               Empezar gratis <ArrowRight className="h-4 w-4" />
@@ -415,7 +415,7 @@ export default async function LandingPage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
-              href={user ? '/dashboard' : '#pricing'}
+              href={user ? '/dashboard' : '/login?mode=signup'}
               className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-10 py-4 rounded-2xl text-lg font-bold hover:bg-primary/90 transition-all active:scale-95 shadow-xl ha-glow-red"
             >
               Empezar 14 días gratis

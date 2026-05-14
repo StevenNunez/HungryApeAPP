@@ -11,7 +11,7 @@ import {
   Package, Plus, Trash2, Edit3, Image as ImageIcon,
   Search, ChevronLeft, MoreVertical, LayoutGrid, List as ListIcon,
   AlertCircle, Save, Loader2, Store, Archive, ArchiveRestore, Settings2, X,
-  HelpCircle, Zap, ChefHat
+  HelpCircle, Zap, ChefHat, Camera, ChevronDown, ExternalLink, Lightbulb
 } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
@@ -19,6 +19,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { ImageUploader } from '@/components/ui/image-uploader';
 
 export default function MenuManagementPage() {
   const { toast } = useToast();
@@ -36,6 +37,11 @@ export default function MenuManagementPage() {
     name: '', price: 0, category: 'Hamburguesas', stock: 50, description: '', image_url: ''
   });
   const [selectedCategory, setSelectedCategory] = useState<string>('Todos');
+
+  // Confirm archive dialog
+  const [confirmArchive, setConfirmArchive] = useState<{ id: string; name: string; currentlyArchived: boolean } | null>(null);
+  // Photo tips panel
+  const [tipsOpen, setTipsOpen] = useState(false);
 
   // Modifier groups (loaded when editing an existing product)
   const [modifierGroups, setModifierGroups] = useState<any[]>([]);
@@ -152,9 +158,6 @@ const PRODUCT_LIMITS: Record<string, number> = {
   };
 
   const handleArchiveProduct = async (id: string, currentlyArchived: boolean) => {
-    const action = currentlyArchived ? 'activar' : 'archivar';
-    if (!confirm(`¿Seguro que quieres ${action} este producto?`)) return;
-    
     const supabase = createClient();
     const { error: updateError } = await supabase
       .from('products')
@@ -295,6 +298,101 @@ const PRODUCT_LIMITS: Record<string, number> = {
           </Button>
         </div>
 
+          {/* ── PHOTO TIPS ── */}
+          <div className="mb-6">
+            <button
+              onClick={() => setTipsOpen(v => !v)}
+              className="flex items-center gap-2 w-full text-left px-4 py-3 rounded-2xl bg-card border border-border/60 hover:border-primary/30 transition-all group"
+            >
+              <div className="p-1.5 bg-primary/10 rounded-xl group-hover:bg-primary/20 transition-colors">
+                <Camera className="h-4 w-4 text-primary" />
+              </div>
+              <span className="text-sm font-bold flex-1">Tips para fotos de productos</span>
+              <span className="text-[11px] text-muted-foreground mr-2 hidden sm:block">Tamaño · Formato · Calidad</span>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-300 ${tipsOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            <AnimatePresence>
+              {tipsOpen && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.25 }}
+                  className="overflow-hidden"
+                >
+                  <div className="mt-2 px-4 py-5 rounded-2xl bg-card border border-border/60 grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {/* Specs */}
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Especificaciones</p>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Tamaño ideal</span>
+                          <span className="font-semibold">800 × 800 px</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Formato</span>
+                          <span className="font-semibold">JPG · PNG · WEBP</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Peso máx. subida</span>
+                          <span className="font-semibold">10 MB</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">Peso tras comprimir</span>
+                          <span className="font-semibold text-green-500">~150–300 KB</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Shoot tips */}
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Para mejores fotos</p>
+                      <ul className="space-y-2 text-sm">
+                        {[
+                          'Usa luz natural lateral, no flash',
+                          'Fondo neutro (blanco, madera, pizarra)',
+                          'Centra el plato y llena el encuadre',
+                          'Limpia los bordes antes de fotografiar',
+                          'Toma desde arriba (45° o cenital)',
+                        ].map(tip => (
+                          <li key={tip} className="flex items-start gap-2">
+                            <Lightbulb className="h-3.5 w-3.5 text-amber-400 mt-0.5 shrink-0" />
+                            <span className="text-muted-foreground">{tip}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    {/* Links */}
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Recursos gratuitos</p>
+                      <div className="space-y-2">
+                        {[
+                          { label: 'Guía de fotografía de comida', href: 'https://www.canva.com/learn/food-photography/' },
+                          { label: 'Redimensionar gratis (Squoosh)', href: 'https://squoosh.app' },
+                          { label: 'Fondos de comida gratis (Unsplash)', href: 'https://unsplash.com/s/photos/food' },
+                          { label: 'Remover fondo gratis (Remove.bg)', href: 'https://www.remove.bg' },
+                        ].map(link => (
+                          <a
+                            key={link.href}
+                            href={link.href}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 text-sm text-primary hover:underline"
+                          >
+                            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                            {link.label}
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
           {/* ── PRODUCTS ── */}
           <div className="mt-8">
             {productsLoading ? (
@@ -366,7 +464,7 @@ const PRODUCT_LIMITS: Record<string, number> = {
                             variant={product.is_archived ? "default" : "destructive"} 
                             size="icon" 
                             className="rounded-full shadow-lg h-8 w-8"
-                            onClick={() => handleArchiveProduct(product.id, product.is_archived)}
+                            onClick={() => setConfirmArchive({ id: product.id, name: product.name, currentlyArchived: product.is_archived })}
                           >
                             {product.is_archived ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
                           </Button>
@@ -427,7 +525,15 @@ const PRODUCT_LIMITS: Record<string, number> = {
                 </div>
                 <div>
                   <label className="text-xs font-bold uppercase pl-1 block mb-1">Precio ($)</label>
-                  <Input type="number" min={0} value={editProduct.price} onChange={e => setEditProduct({ ...editProduct, price: Number(e.target.value) })} className="rounded-2xl h-12" />
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="0"
+                    value={editProduct.price || ''}
+                    onFocus={e => e.target.select()}
+                    onChange={e => setEditProduct({ ...editProduct, price: e.target.value === '' ? 0 : Number(e.target.value) })}
+                    className="rounded-2xl h-12"
+                  />
                 </div>
                 <div>
                   <label className="text-xs font-bold uppercase pl-1 block mb-1">Categoría</label>
@@ -454,11 +560,25 @@ const PRODUCT_LIMITS: Record<string, number> = {
                 </div>
                 <div>
                   <label className="text-xs font-bold uppercase pl-1 block mb-1">Stock disponible</label>
-                  <Input type="number" min={0} value={editProduct.stock} onChange={e => setEditProduct({ ...editProduct, stock: Number(e.target.value) })} className="rounded-2xl h-12" />
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder="0"
+                    value={editProduct.stock || ''}
+                    onFocus={e => e.target.select()}
+                    onChange={e => setEditProduct({ ...editProduct, stock: e.target.value === '' ? 0 : Number(e.target.value) })}
+                    className="rounded-2xl h-12"
+                  />
                 </div>
                 <div>
-                  <label className="text-xs font-bold uppercase pl-1 block mb-1">URL Imagen</label>
-                  <Input value={editProduct.image_url || ''} onChange={e => setEditProduct({ ...editProduct, image_url: e.target.value })} placeholder="https://..." className="rounded-2xl h-12" />
+                  <label className="text-xs font-bold uppercase pl-1 block mb-1">Imagen</label>
+                  <ImageUploader
+                    value={editProduct.image_url}
+                    onChange={url => setEditProduct({ ...editProduct, image_url: url })}
+                    uploadPath={`${tenant?.id}/products`}
+                    aspectRatio="square"
+                    placeholder="Subir imagen del producto"
+                  />
                 </div>
                 <div className="col-span-2">
                   <label className="text-xs font-bold uppercase pl-1 block mb-1">Descripción</label>
@@ -677,6 +797,67 @@ const PRODUCT_LIMITS: Record<string, number> = {
                 <Button onClick={handleSaveProduct} disabled={saving || !editProduct.name.trim()} className="flex-[2] h-14 rounded-2xl font-bold gap-2 active:scale-95">
                   {saving ? <Loader2 className="h-5 w-5 animate-spin" /> : <Save className="h-5 w-5" />}
                   Guardar Producto
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* ── Confirm archive/activate modal ─────────────────────────────── */}
+      <AnimatePresence>
+        {confirmArchive && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setConfirmArchive(null)}
+              className="absolute inset-0 bg-background/80 backdrop-blur-md"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 16 }}
+              transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+              className="relative w-full max-w-sm bg-card border border-border rounded-[2rem] shadow-2xl p-8 flex flex-col items-center text-center gap-5"
+            >
+              <div className={`p-4 rounded-3xl ${confirmArchive.currentlyArchived ? 'bg-green-500/10' : 'bg-amber-500/10'}`}>
+                {confirmArchive.currentlyArchived
+                  ? <ArchiveRestore className="h-8 w-8 text-green-500" />
+                  : <Archive className="h-8 w-8 text-amber-500" />
+                }
+              </div>
+              <div>
+                <h3 className="font-brand text-xl uppercase tracking-wide mb-1">
+                  {confirmArchive.currentlyArchived ? 'Activar producto' : 'Archivar producto'}
+                </h3>
+                <p className="text-muted-foreground text-sm">
+                  {confirmArchive.currentlyArchived
+                    ? <>¿Quieres volver a mostrar <span className="text-foreground font-semibold">"{confirmArchive.name}"</span> en el menú?</>
+                    : <>¿Quieres ocultar <span className="text-foreground font-semibold">"{confirmArchive.name}"</span> del menú? Podrás reactivarlo cuando quieras.</>
+                  }
+                </p>
+              </div>
+              <div className="flex gap-3 w-full mt-1">
+                <Button
+                  variant="ghost"
+                  onClick={() => setConfirmArchive(null)}
+                  className="flex-1 h-12 rounded-2xl font-bold"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={() => {
+                    handleArchiveProduct(confirmArchive.id, confirmArchive.currentlyArchived);
+                    setConfirmArchive(null);
+                  }}
+                  className={`flex-1 h-12 rounded-2xl font-bold ${confirmArchive.currentlyArchived
+                    ? 'bg-green-500 hover:bg-green-600 text-white'
+                    : 'bg-amber-500 hover:bg-amber-600 text-white'
+                  }`}
+                >
+                  {confirmArchive.currentlyArchived ? 'Sí, activar' : 'Sí, archivar'}
                 </Button>
               </div>
             </motion.div>

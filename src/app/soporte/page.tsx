@@ -46,12 +46,12 @@ const faqs = [
   },
   {
     q: '¿Puedo tener múltiples menús o locales?',
-    a: 'El plan Enterprise incluye soporte multi-sucursales. Con los planes Gratis, Starter y Pro, cada cuenta corresponde a un local.',
+    a: 'El plan Enterprise incluye soporte multi-sucursales. Con los planes Básico, Starter y Pro, cada cuenta corresponde a un local.',
   },
 ];
 
 const slaByPlan = [
-  { plan: 'Gratis', color: 'bg-muted', time: 'Hasta 5 días hábiles', channel: 'Email' },
+  { plan: 'Básico', color: 'bg-teal-500/10', time: 'Hasta 5 días hábiles', channel: 'Email' },
   { plan: 'Starter', color: 'bg-blue-500/10 border-blue-500/20', time: 'Hasta 48 horas hábiles', channel: 'Email' },
   { plan: 'Pro', color: 'bg-primary/10 border-primary/20', time: 'Hasta 24 horas hábiles', channel: 'Email prioritario' },
   { plan: 'Enterprise', color: 'bg-amber-500/10 border-amber-500/20', time: 'Hasta 4 horas hábiles', channel: 'Email + canal dedicado' },

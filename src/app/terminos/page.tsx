@@ -65,7 +65,7 @@ export default function TerminosPage() {
               El Servicio se ofrece en los siguientes planes:
             </p>
             <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-2">
-              <li><strong className="text-foreground">Gratis</strong> — sin costo, con limitaciones de productos y pedidos.</li>
+              <li><strong className="text-foreground">Básico</strong> — suscripción mensual o anual, menú digital, QR y cocina en tiempo real.</li>
               <li><strong className="text-foreground">Starter</strong> — suscripción mensual o anual, funcionalidades de inventario y analíticas básicas.</li>
               <li><strong className="text-foreground">Pro</strong> — suscripción mensual o anual, incluye pagos online, WhatsApp y reportes avanzados.</li>
               <li><strong className="text-foreground">Enterprise</strong> — suscripción mensual o anual, incluye multi-sucursales y control de insumos y costos.</li>

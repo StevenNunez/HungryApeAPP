@@ -74,11 +74,12 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      return NextResponse.json({
-        preferenceId: result.id,
-        initPoint: result.init_point,
-        sandboxInitPoint: (result as any).sandbox_init_point,
-      });
+      const isSandbox = process.env.MERCADOPAGO_ACCESS_TOKEN?.startsWith('TEST-');
+      const checkoutUrl = isSandbox
+        ? ((result as any).sandbox_init_point || result.init_point)
+        : result.init_point;
+
+      return NextResponse.json({ preferenceId: result.id, checkoutUrl });
     }
 
     // ─── MONTHLY: recurring subscription via PreApproval ─────────────────────
@@ -107,11 +108,12 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return NextResponse.json({
-      preapprovalId: result.id,
-      initPoint: result.init_point,
-      sandboxInitPoint: (result as any).sandbox_init_point,
-    });
+    const isSandbox = process.env.MERCADOPAGO_ACCESS_TOKEN?.startsWith('TEST-');
+    const checkoutUrl = isSandbox
+      ? ((result as any).sandbox_init_point || result.init_point)
+      : result.init_point;
+
+    return NextResponse.json({ preapprovalId: result.id, checkoutUrl });
   } catch (error: any) {
     console.error('MP create-preference error:', error?.cause ?? error);
     return NextResponse.json(

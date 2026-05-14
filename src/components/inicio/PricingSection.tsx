@@ -98,7 +98,7 @@ export function PricingSection() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [businessName, setBusinessName] = useState('');
-  const [isAnnual, setIsAnnual] = useState(true);
+  const [isAnnual, setIsAnnual] = useState(false);
   const [user, setUser] = useState<any>(null);
 
   useEffect(() => {
@@ -164,7 +164,7 @@ export function PricingSection() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al conectar con pagos');
       
-      const checkoutUrl = data.sandboxInitPoint || data.initPoint;
+      const checkoutUrl = data.checkoutUrl;
       if (checkoutUrl) window.location.href = checkoutUrl;
       else throw new Error('No se generó el link de pago');
     } catch (err: any) {
@@ -196,7 +196,7 @@ export function PricingSection() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al conectar con Mercado Pago');
 
-      const checkoutUrl = data.sandboxInitPoint || data.initPoint;
+      const checkoutUrl = data.checkoutUrl;
       if (checkoutUrl) {
         window.location.href = checkoutUrl;
       } else {

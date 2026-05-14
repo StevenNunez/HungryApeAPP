@@ -93,6 +93,7 @@ export function getEffectivePlan(tenant: {
   subscription_status?: string | null;
   trial_ends_at?: string | null;
 }): string {
+  // Active trial → Starter-level access for 14 days
   if (
     tenant.subscription_status === 'trial' &&
     tenant.trial_ends_at &&
@@ -100,7 +101,15 @@ export function getEffectivePlan(tenant: {
   ) {
     return 'starter';
   }
-  return tenant.plan_id || 'gratis';
+  // Paid plan requires active status — cancelled/inactive/paused → gratis
+  if (
+    tenant.plan_id &&
+    tenant.plan_id !== 'gratis' &&
+    tenant.subscription_status === 'active'
+  ) {
+    return tenant.plan_id;
+  }
+  return 'gratis';
 }
 
 /** Get the number of orders made today for a given tenant. */

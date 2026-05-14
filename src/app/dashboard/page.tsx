@@ -11,20 +11,56 @@ import { useToast } from '@/hooks/use-toast';
 import { FREE_PLAN_MAX_ORDERS, FREE_PLAN_ALERT_THRESHOLD, getTodayOrderCount, getEffectivePlan } from '@/lib/data';
 
 const PLAN_LABELS: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
-  gratis: { label: 'Plan Gratis', color: 'bg-muted text-muted-foreground border-border', icon: <Zap className="h-3 w-3" /> },
+  gratis: { label: 'Sin plan activo', color: 'bg-muted text-muted-foreground border-border', icon: <Zap className="h-3 w-3" /> },
+  basico: { label: 'Plan Básico', color: 'bg-teal-500/10 text-teal-400 border-teal-500/20', icon: <Zap className="h-3 w-3" /> },
   starter: { label: 'Plan Starter', color: 'bg-blue-500/10 text-blue-400 border-blue-500/20', icon: <Zap className="h-3 w-3" /> },
   pro: { label: 'Plan Pro', color: 'bg-primary/10 text-primary border-primary/20', icon: <Crown className="h-3 w-3" /> },
   enterprise: { label: 'Plan Enterprise', color: 'bg-purple-500/10 text-purple-400 border-purple-500/20', icon: <Crown className="h-3 w-3" /> },
 };
 
 function PlanBadge({ planId, status, trialEndsAt }: { planId?: string | null; status?: string | null; trialEndsAt?: string | null }) {
-  const isTrialActive = status === 'trial' && trialEndsAt && new Date(trialEndsAt) > new Date();
+  const now = Date.now();
+  const isTrialActive = status === 'trial' && trialEndsAt && new Date(trialEndsAt).getTime() > now;
+  const isTrialExpired = status === 'trial' && trialEndsAt && new Date(trialEndsAt).getTime() <= now;
   const daysLeft = isTrialActive
-    ? Math.ceil((new Date(trialEndsAt!).getTime() - Date.now()) / 86400000)
+    ? Math.ceil((new Date(trialEndsAt!).getTime() - now) / 86400000)
     : 0;
   const effectivePlanId = isTrialActive ? 'starter' : (planId || 'gratis');
   const plan = PLAN_LABELS[effectivePlanId] ?? PLAN_LABELS.gratis;
-  const isActive = effectivePlanId === 'gratis' || status === 'active' || isTrialActive;
+
+  const statusBadge = () => {
+    if (isTrialActive) return (
+      <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border bg-blue-500/10 text-blue-400 border-blue-500/20">
+        Trial · {daysLeft}d
+      </span>
+    );
+    if (isTrialExpired) return (
+      <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border bg-red-500/10 text-red-400 border-red-500/20">
+        ● Vencida
+      </span>
+    );
+    if (!planId || planId === 'gratis') return null;
+    if (status === 'active') return (
+      <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border bg-green-500/10 text-green-500 border-green-500/20">
+        ● Activo
+      </span>
+    );
+    if (status === 'cancelled') return (
+      <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border bg-red-500/10 text-red-400 border-red-500/20">
+        ● Cancelado
+      </span>
+    );
+    if (status === 'paused') return (
+      <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border bg-amber-500/10 text-amber-400 border-amber-500/20">
+        ● Pausado
+      </span>
+    );
+    return (
+      <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse">
+        ● Pendiente
+      </span>
+    );
+  };
 
   return (
     <div className="flex items-center gap-2 mt-1 sm:mt-0">
@@ -32,20 +68,7 @@ function PlanBadge({ planId, status, trialEndsAt }: { planId?: string | null; st
         {plan.icon}
         {plan.label}
       </span>
-      {isTrialActive && (
-        <span className="inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border bg-blue-500/10 text-blue-400 border-blue-500/20">
-          Trial · {daysLeft}d
-        </span>
-      )}
-      {!isTrialActive && planId && planId !== 'gratis' && (
-        <span className={`inline-flex items-center px-2 py-1 rounded-full text-[10px] font-bold uppercase tracking-widest border ${
-          isActive
-            ? 'bg-green-500/10 text-green-500 border-green-500/20'
-            : 'bg-amber-500/10 text-amber-400 border-amber-500/20 animate-pulse'
-        }`}>
-          {isActive ? '● Activo' : '● Pendiente'}
-        </span>
-      )}
+      {statusBadge()}
     </div>
   );
 }
@@ -57,6 +80,8 @@ export default function DashboardPage() {
   const [tenant, setTenant] = useState<any>(null);
   const [user, setUser] = useState<any>(null);
   const [todayOrders, setTodayOrders] = useState<number>(0);
+  const [subAlert, setSubAlert] = useState<'trial_expiring' | 'expired' | 'cancelled' | 'paused' | null>(null);
+  const [trialDaysLeft, setTrialDaysLeft] = useState<number>(0);
 
   useEffect(() => {
     async function loadDashboard() {
@@ -78,27 +103,44 @@ export default function DashboardPage() {
         .eq('owner_id', authUser.id)
         .single();
 
+      // No tenant → user signed up via Google or email confirmation but tenant wasn't created yet
+      if (!tenantData) {
+        router.replace('/dashboard/setup');
+        return;
+      }
+
       setTenant(tenantData);
 
       // Load today's order count for Free plan users (trial = starter, so no limit)
       const effectivePlan = getEffectivePlan(tenantData as any);
-      if (tenantData && effectivePlan === 'gratis') {
+      if (effectivePlan === 'gratis') {
         const count = await getTodayOrderCount(tenantData.id);
         setTodayOrders(count);
       }
 
       setLoading(false);
 
-      // Subscription guard: paid plan that is not active (trial is exempt)
+      // Compute subscription alert state for persistent banners
       const td = tenantData as any;
-      const isTrialActive = td?.subscription_status === 'trial' &&
-        td?.trial_ends_at && new Date(td.trial_ends_at) > new Date();
-      if (td && td.plan_id && td.plan_id !== 'gratis' && !isTrialActive && td.subscription_status !== 'active') {
-        toast({
-          title: '⚠️ Suscripción pendiente',
-          description: 'Aún estamos validando tu pago o la suscripción ha caducado.',
-          variant: 'destructive'
-        });
+      if (td) {
+        const now = Date.now();
+        const trialEnd = td.trial_ends_at ? new Date(td.trial_ends_at).getTime() : 0;
+        const isTrialActive = td.subscription_status === 'trial' && trialEnd > now;
+        const isTrialExpired = td.subscription_status === 'trial' && trialEnd <= now;
+
+        if (isTrialExpired) {
+          setSubAlert('expired');
+        } else if (isTrialActive) {
+          const days = Math.ceil((trialEnd - now) / 86400000);
+          setTrialDaysLeft(days);
+          if (days <= 7) setSubAlert('trial_expiring');
+        } else if (td.plan_id && td.plan_id !== 'gratis' && td.subscription_status === 'cancelled') {
+          setSubAlert('cancelled');
+        } else if (td.plan_id && td.plan_id !== 'gratis' && td.subscription_status === 'paused') {
+          setSubAlert('paused');
+        } else if (td.plan_id && td.plan_id !== 'gratis' && td.subscription_status !== 'active') {
+          setSubAlert('expired');
+        }
       }
     }
 
@@ -170,6 +212,52 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* ―― Alert banner: subscription expired / cancelled ―― */}
+        {(subAlert === 'expired' || subAlert === 'cancelled' || subAlert === 'paused') && (
+          <div className="mb-6 relative overflow-hidden flex items-start gap-4 bg-red-500/10 border border-red-500/40 rounded-2xl px-5 py-4">
+            <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-red-800 text-sm">
+                {subAlert === 'cancelled' && 'Tu suscripción fue cancelada'}
+                {subAlert === 'paused' && 'Tu suscripción está pausada'}
+                {subAlert === 'expired' && 'Tu período de prueba ha vencido'}
+              </p>
+              <p className="text-xs text-red-600 mt-0.5">
+                {subAlert === 'cancelled' && 'Tu suscripción fue cancelada. Tu cuenta está sin plan activo y con acceso restringido. Activa un plan para recuperar el acceso completo.'}
+                {subAlert === 'paused' && 'Tu suscripción está temporalmente pausada. Actívala para recuperar el acceso completo.'}
+                {subAlert === 'expired' && 'Tu período de prueba ha terminado. Tu cuenta está sin plan activo y con acceso restringido. Activa un plan para continuar sin límites.'}
+              </p>
+            </div>
+            <Link
+              href="/#pricing"
+              className="shrink-0 inline-flex items-center gap-1.5 bg-red-500 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-red-400 transition-colors"
+            >
+              Activar plan <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        )}
+
+        {/* ―― Alert banner: trial expiring soon (≤ 7 days) ―― */}
+        {subAlert === 'trial_expiring' && (
+          <div className="mb-6 relative overflow-hidden flex items-start gap-4 bg-amber-500/10 border border-amber-500/40 rounded-2xl px-5 py-4">
+            <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-amber-300 text-sm">
+                {trialDaysLeft === 1 ? '¡Tu prueba vence hoy!' : `Tu prueba vence en ${trialDaysLeft} días`}
+              </p>
+              <p className="text-xs text-amber-200/70 mt-0.5">
+                Activa tu plan ahora para no perder pedidos ilimitados, inventario y reportes.
+              </p>
+            </div>
+            <Link
+              href="/#pricing"
+              className="shrink-0 inline-flex items-center gap-1.5 bg-amber-500 text-black text-xs font-bold px-4 py-2 rounded-xl hover:bg-amber-400 transition-colors"
+            >
+              Ver planes <ArrowRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+        )}
+
         {/* ―― Alert banner: 80% of daily order limit ―― */}
         {tenant && getEffectivePlan(tenant) === 'gratis' && todayOrders >= FREE_PLAN_ALERT_THRESHOLD && (
           <div className="mb-6 relative overflow-hidden flex items-start gap-4 bg-amber-500/10 border border-amber-500/40 rounded-2xl px-5 py-4">
@@ -179,7 +267,7 @@ export default function DashboardPage() {
                 Te quedan {FREE_PLAN_MAX_ORDERS - todayOrders} pedidos hoy
               </p>
               <p className="text-xs text-amber-200/70 mt-0.5">
-                El plan Gratis tiene un límite de {FREE_PLAN_MAX_ORDERS} pedidos por día. Sube a Starter para no frenar tu negocio.
+                Sin un plan activo tienes un límite de {FREE_PLAN_MAX_ORDERS} pedidos por día. Activa un plan para no frenar tu negocio.
               </p>
             </div>
             <Link
@@ -251,7 +339,7 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-muted-foreground">Stock en tiempo real, alertas de stock bajo y m&#233;tricas de ventas.</p>
-                  <p className="text-xs text-amber-400 mt-2 font-semibold">Disponible en Starter &#8594;</p>
+                  <p className="text-xs text-amber-600 mt-2 font-semibold">Disponible en Starter &#8594;</p>
                 </CardContent>
               </Card>
             </Link>
@@ -288,7 +376,7 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <p className="text-sm text-muted-foreground">Inicio y cierre de caja con arqueo automático y registro de diferencias.</p>
-                  <p className="text-xs text-amber-400 mt-2 font-semibold">Disponible en Starter &#8594;</p>
+                  <p className="text-xs text-amber-600 mt-2 font-semibold">Disponible en Starter &#8594;</p>
                 </CardContent>
               </Card>
             </Link>
