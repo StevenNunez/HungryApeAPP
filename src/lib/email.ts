@@ -108,7 +108,7 @@ function buildWelcomeHtml(businessName: string, planId: PlanId, dashboardUrl: st
               </p>
               <p style="margin:0 0 24px;font-size:15px;color:#6b7280;line-height:1.6;">
                 Te damos la bienvenida a <strong style="color:#111827;">Hungry Ape</strong>. Tu cuenta fue creada exitosamente con el <strong>Plan ${planName}</strong>.
-                A partir de ahora podés recibir pedidos digitales, gestionar tu cocina y crecer sin complicaciones.
+                A partir de ahora puedes recibir pedidos digitales, gestionar tu cocina y crecer sin complicaciones.
               </p>
 
               ${trialBanner}
@@ -116,7 +116,7 @@ function buildWelcomeHtml(businessName: string, planId: PlanId, dashboardUrl: st
               <!-- Plan benefits -->
               <div style="background:#f3f4f6;border-radius:16px;padding:24px 28px;margin-bottom:28px;">
                 <p style="margin:0 0 14px;font-size:14px;font-weight:700;color:#111827;text-transform:uppercase;letter-spacing:1px;">
-                  Plan ${planName} — Lo que tenés incluido:
+                  Plan ${planName} — Lo que tienes incluido:
                 </p>
                 <ul style="margin:0;padding:0 0 0 4px;list-style:none;">
                   ${benefitItems}
@@ -135,7 +135,7 @@ function buildWelcomeHtml(businessName: string, planId: PlanId, dashboardUrl: st
               </table>
 
               <p style="margin:28px 0 0;font-size:13px;color:#9ca3af;text-align:center;line-height:1.5;">
-                Si tenés alguna duda, respondé este correo o escríbenos a<br/>
+                Si tienes alguna duda, responde este correo o escríbenos a<br/>
                 <a href="mailto:hola@teolabs.app" style="color:#dc2626;text-decoration:none;">hola@teolabs.app</a>
               </p>
             </td>
