@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { TeoLabsCredit } from '@/components/compartido/TeoLabsCredit';
 import {
@@ -52,12 +53,49 @@ const features: { icon: React.ElementType; title: string; description: string; b
   },
 ];
 
+export const metadata: Metadata = {
+  // El canonical vive aquí y no en el layout: en el layout apuntaría todas las páginas a "/"
+  alternates: { canonical: '/' },
+};
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://ape.teolabs.app';
+
+// Datos estructurados para Google y asistentes de IA: qué es el producto y quién lo hace
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@graph': [
+    {
+      '@type': 'SoftwareApplication',
+      '@id': `${APP_URL}/#app`,
+      name: 'Hungry Ape',
+      url: APP_URL,
+      applicationCategory: 'BusinessApplication',
+      operatingSystem: 'Web',
+      inLanguage: 'es-CL',
+      description:
+        'Plataforma para food trucks: menú digital con QR, pedidos en tiempo real, cocina, caja, inventario y reportes.',
+      image: `${APP_URL}/og-image.png`,
+      publisher: { '@id': 'https://www.teolabs.app/#org' },
+    },
+    {
+      '@type': 'Organization',
+      '@id': 'https://www.teolabs.app/#org',
+      name: 'Teo Labs',
+      url: 'https://www.teolabs.app',
+    },
+  ],
+};
+
 export default async function LandingPage() {
   const supabase = await createServerSupabaseClient();
   const { data: { user } } = await supabase.auth.getUser();
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, '\\u003c') }}
+      />
 
       {/* ═══ Navigation ═══ */}
       <nav className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur-md">

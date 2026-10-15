@@ -7,7 +7,7 @@ import { rejectUnlessCron } from '@/lib/cron-auth';
 /**
  * GET /api/cron/check-subscriptions
  *
- * Hourly. Keeps tenants' subscription state in sync even if a webhook was missed:
+ * Daily (Vercel Hobby allows at most one run per day). Keeps tenants' subscription state in sync even if a webhook was missed:
  *  - Annual plans (one-off payment, have subscription_expires_at): deactivated once the term ends.
  *  - Monthly plans (Mercado Pago PreApproval): status mirrored from Mercado Pago.
  *

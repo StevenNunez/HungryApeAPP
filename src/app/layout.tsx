@@ -7,7 +7,10 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://ape.teolabs.app';
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  themeColor: [{ media: '(prefers-color-scheme: dark)', color: '#0a0a0a' }],
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: '#ef4444' },
+    { media: '(prefers-color-scheme: dark)', color: '#0a0a0a' },
+  ],
 };
 
 export const metadata: Metadata = {
@@ -17,9 +20,16 @@ export const metadata: Metadata = {
   },
   description: 'La plataforma SaaS para Food Trucks. Menú digital con QR, pedidos en tiempo real, control de stock e inventario. Rápido, rico y salvaje.',
   metadataBase: new URL(APP_URL),
+  keywords: [
+    'food truck', 'menú digital', 'menú QR', 'pedidos online', 'software para food trucks',
+    'carrito de comida', 'comida rápida', 'Chile',
+  ],
+  authors: [{ name: 'Teo Labs', url: 'https://www.teolabs.app' }],
+  creator: 'Teo Labs',
+  robots: { index: true, follow: true },
   icons: {
     icon: [
-      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/favicon.ico', sizes: '16x16 32x32 48x48' },
       { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
     ],
     apple: '/icons/apple-touch-icon.png',
@@ -44,7 +54,7 @@ export const metadata: Metadata = {
         url: '/og-image.png',
         width: 1200,
         height: 630,
-        alt: 'Hungry Ape — Menú digital para Food Trucks',
+        alt: 'Hungry Ape — Menú digital para Food Trucks. Escanea el QR, pide y retira.',
       },
     ],
   },
