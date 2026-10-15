@@ -3,10 +3,11 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { Order, OrderStatus as OrderStatusType } from '@/lib/types';
-import { getOrderById, subscribeToOrderStatus } from '@/lib/data';
+import { getOrderById } from '@/lib/data';
 import { Card, CardContent } from '@/components/ui/card';
 import { Clock, CookingPot, PackageCheck, ShieldCheck, Banknote, CreditCard, ArrowRight, Smartphone, AlertCircle } from 'lucide-react';
 import { formatCLP } from '@/lib/utils';
+import { NotifyMe } from './NotifyMe';
 
 const statusSteps: OrderStatusType[] = ['Por Pagar', 'Pendiente', 'En preparación', 'Listo'];
 
@@ -52,6 +53,21 @@ export function OrderStatus({ orderId }: { orderId: string }) {
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+  const [paying, setPaying] = useState(false);
+
+  // Starts / resumes the Mercado Pago checkout of an online-payment order
+  const payOnline = async () => {
+    setPaying(true);
+    try {
+      const res = await fetch(`/api/orders/${orderId}/pay`, { method: 'POST' });
+      const json = await res.json();
+      if (!res.ok || !json.url) throw new Error(json?.error || 'No se pudo iniciar el pago');
+      window.location.href = json.url;
+    } catch (err: any) {
+      toast({ title: 'No pudimos abrir el pago', description: err?.message, variant: 'destructive' });
+      setPaying(false);
+    }
+  };
 
   // Fetch order from Supabase
   useEffect(() => {
@@ -64,43 +80,29 @@ export function OrderStatus({ orderId }: { orderId: string }) {
     });
   }, [orderId, pickupCodeFromUrl]);
 
-  // Realtime subscription — set up once we know the tenantId (from loaded order)
-  // Uses tenant_id filter (same proven pattern as kitchen) and matches orderId client-side
-  useEffect(() => {
-    if (!order?.tenantId) return;
-
-    const unsubscribe = subscribeToOrderStatus(order.tenantId, orderId, (updatedRow) => {
-      const newStatus = updatedRow.status as OrderStatusType;
-      setOrder(prev => {
-        if (!prev) return null;
-        return { ...prev, status: newStatus };
-      });
-      if (newStatus === 'Listo') {
-        toast({
-          title: '🔥 ¡TU PEDIDO ESTÁ LISTO!',
-          description: 'Acércate a caja con tu código para retirar.',
-          variant: 'default',
-        });
-      }
-    });
-
-    return unsubscribe;
-  }, [order?.tenantId, orderId, toast]);
-
-  // Polling fallback: re-fetches every 2s in case realtime misses an event
+  // Status tracking: orders are no longer publicly readable through Realtime
+  // (RLS), so the customer page polls the get_order_public RPC instead.
+  // Skips ticks while the tab is hidden.
   useEffect(() => {
     if (!orderId) return;
     const interval = setInterval(async () => {
+      if (document.visibilityState === 'hidden') return;
       const fresh = await getOrderById(orderId);
-      if (fresh) {
-        setOrder(prev => {
-          if (!prev || prev.status === fresh.status) return prev;
-          return { ...prev, status: fresh.status };
-        });
-      }
-    }, 2000);
+      if (!fresh) return;
+      setOrder(prev => {
+        if (!prev || prev.status === fresh.status) return prev;
+        if (fresh.status === 'Listo') {
+          toast({
+            title: '🔥 ¡TU PEDIDO ESTÁ LISTO!',
+            description: 'Acércate a caja con tu código para retirar.',
+            variant: 'default',
+          });
+        }
+        return { ...prev, status: fresh.status };
+      });
+    }, 3000);
     return () => clearInterval(interval);
-  }, [orderId]);
+  }, [orderId, toast]);
 
   if (loading) {
     return (
@@ -196,6 +198,25 @@ export function OrderStatus({ orderId }: { orderId: string }) {
                 <p>Por favor, pide los datos de transferencia en caja.</p>
               </div>
             )}
+          </div>
+        );
+      case 'online':
+        return (
+          <div className="bg-primary/10 border-2 border-primary/30 p-6 rounded-2xl text-center space-y-4">
+            <div className="w-16 h-16 bg-primary/20 text-primary rounded-full flex items-center justify-center mx-auto">
+              <CreditCard className="w-8 h-8" />
+            </div>
+            <h3 className="text-xl font-bold text-primary">Falta pagar online</h3>
+            <p className="text-muted-foreground text-sm">
+              Paga <strong>{formatCLP(order.total)}</strong> con tarjeta o Mercado Pago. Tu pedido pasa a cocina apenas se confirme el pago.
+            </p>
+            <button
+              onClick={payOnline}
+              disabled={paying}
+              className="w-full h-12 rounded-xl bg-primary text-primary-foreground font-bold disabled:opacity-60"
+            >
+              {paying ? 'Abriendo Mercado Pago...' : 'Pagar ahora'}
+            </button>
           </div>
         );
       case 'qr':
@@ -313,6 +334,11 @@ export function OrderStatus({ orderId }: { orderId: string }) {
             </div>
           </CardContent>
         </Card>
+      )}
+
+      {/* ── "Avísame cuando esté listo" (Pro) ── */}
+      {order.notifyEnabled && order.status !== 'Listo' && order.status !== 'Entregado' && (
+        <NotifyMe orderId={order.id} />
       )}
 
       {/* ── Reminder ── */}

@@ -112,7 +112,7 @@ export default function DashboardPage() {
       setTenant(tenantData);
 
       // Load today's order count for Free plan users (trial = starter, so no limit)
-      const effectivePlan = getEffectivePlan(tenantData as any);
+      const effectivePlan = getEffectivePlan(tenantData);
       if (effectivePlan === 'gratis') {
         const count = await getTodayOrderCount(tenantData.id);
         setTodayOrders(count);
@@ -121,7 +121,7 @@ export default function DashboardPage() {
       setLoading(false);
 
       // Compute subscription alert state for persistent banners
-      const td = tenantData as any;
+      const td = tenantData;
       if (td) {
         const now = Date.now();
         const trialEnd = td.trial_ends_at ? new Date(td.trial_ends_at).getTime() : 0;

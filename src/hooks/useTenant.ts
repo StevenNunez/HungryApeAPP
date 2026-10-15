@@ -3,6 +3,8 @@
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
+export const NO_TENANT_MESSAGE = 'Tu cuenta no tiene un negocio configurado. Por favor, completa tu registro.';
+
 export type TenantStatus = 'loading' | 'found' | 'creating' | 'not_found' | 'unauthenticated';
 
 export interface UseTenantResult {
@@ -74,15 +76,39 @@ export function useTenant(): UseTenantResult {
           // Tenant doesn't exist — surface this clearly
           if (!cancelled) {
             setStatus('not_found');
-            setError('Tu cuenta no tiene un negocio configurado. Por favor, completa tu registro.');
+            setError(NO_TENANT_MESSAGE);
           }
           clearTimeout(timeout);
           return;
         }
 
-        // 3. All good
+        // 3. Paid before signing up? Apply that payment to this business (once per session).
+        let finalTenant = tenantData;
+        if (tenantData.subscription_status !== 'active') {
+          // The payment webhook can land a few seconds AFTER the first dashboard load,
+          // so retry at most once a minute instead of once per session.
+          const flag = `ha_claim_${user.id}`;
+          let recentlyTried = false;
+          try { recentlyTried = Date.now() - Number(sessionStorage.getItem(flag) || 0) < 60_000; } catch {}
+          if (!recentlyTried) {
+            try {
+              const res = await fetch('/api/billing/claim', { method: 'POST' });
+              const json = await res.json().catch(() => null);
+              if (json && json.reason !== 'email_not_confirmed') {
+                try { sessionStorage.setItem(flag, String(Date.now())); } catch {}
+              }
+              if (json?.claimed) {
+                const { data: fresh } = await supabase
+                  .from('tenants').select('*').eq('owner_id', user.id).maybeSingle();
+                if (fresh) finalTenant = fresh;
+              }
+            } catch { /* non-fatal: the next load retries */ }
+          }
+        }
+
+        // 4. All good
         if (!cancelled) {
-          setTenant(tenantData);
+          setTenant(finalTenant);
           setStatus('found');
           setError(null);
         }

@@ -15,7 +15,7 @@ export async function POST() {
     const serviceClient = createServiceSupabaseClient();
 
     // Fetch current tenant
-    const { data: tenant, error: fetchError } = await (serviceClient.from('tenants') as any)
+    const { data: tenant, error: fetchError } = await serviceClient.from('tenants')
       .select('id, subscription_status, subscription_payment_id')
       .eq('owner_id', user.id)
       .single();
@@ -44,7 +44,7 @@ export async function POST() {
     }
 
     // Mark tenant as cancelled in DB
-    const { error: updateError } = await (serviceClient.from('tenants') as any)
+    const { error: updateError } = await serviceClient.from('tenants')
       .update({
         subscription_status: 'cancelled',
         subscription_updated_at: new Date().toISOString(),

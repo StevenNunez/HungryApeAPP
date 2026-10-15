@@ -9,10 +9,13 @@ export default {
   ],
   theme: {
     extend: {
+      letterSpacing: { wordmark: '-0.05em' },
       fontFamily: {
         body: ['Poppins', 'sans-serif'],
         headline: ['Luckiest Guy', 'cursive'],
         brand: ['Luckiest Guy', 'cursive'],
+        // El nombre "Teo Labs" (Lexend Bold). Usar siempre con `tracking-wordmark`.
+        wordmark: ['Lexend', 'Poppins', 'sans-serif'],
         code: ['monospace'],
       },
       colors: {

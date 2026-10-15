@@ -50,7 +50,7 @@ export interface CartItem extends MenuItem {
 }
 
 export type OrderStatus = 'Por Pagar' | 'Pendiente' | 'En preparación' | 'Listo' | 'Entregado';
-export type PaymentMethod = 'cash' | 'transfer' | 'card' | 'qr';
+export type PaymentMethod = 'cash' | 'transfer' | 'card' | 'qr' | 'online';
 export type OrderType = 'aqui' | 'llevar';
 
 export interface Order {
@@ -67,6 +67,10 @@ export interface Order {
   /** Sequential daily ticket number (e.g. 1, 2, 3) */
   shortId?: number;
   createdAt: Date;
+  /** True once an online (Mercado Pago) payment has been confirmed */
+  paidOnline?: boolean;
+  /** "Order ready" alerts (push / WhatsApp) are available for this business */
+  notifyEnabled?: boolean;
   /** Populated for display if order payment is transfer */
   transferDetails?: {
     bank: string;
@@ -131,6 +135,8 @@ export function mapOrderRow(row: any, items: CartItem[]): Order {
     shortId: row.short_id,
     orderType: (row.order_type as OrderType) ?? 'aqui',
     createdAt: new Date(row.created_at),
+    paidOnline: !!row.paid_online,
+    notifyEnabled: !!row.notify_enabled,
     transferDetails: row.tenants ? {
       bank: row.tenants.transfer_bank || '',
       accountType: row.tenants.transfer_account_type || '',

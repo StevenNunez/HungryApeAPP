@@ -6,27 +6,35 @@ import { createServerSupabaseClient } from '@/lib/supabase/server';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { planId, email, businessName, isPreRegistration, userId, isAnnual } = body;
-    let { tenantId } = body;
+    const { planId, email, businessName, isPreRegistration, isAnnual } = body;
+    let { tenantId, userId } = body;
 
     const plan = SUBSCRIPTION_PLANS[planId as PlanId];
     if (!plan) return NextResponse.json({ error: 'Plan inválido' }, { status: 400 });
 
-    // Derive app URL from the request itself so it works with ngrok, production,
-    // and localhost without changing env vars each time.
+    // In production the app URL is fixed by env (back_urls / notification_url must not be
+    // steerable through request headers). Locally / behind ngrok it falls back to the request host.
     const proto = request.headers.get('x-forwarded-proto') ?? 'http';
     const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? 'localhost:3000';
-    const appUrl = `${proto}://${host}`;
+    const appUrl = process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_APP_URL
+      ? process.env.NEXT_PUBLIC_APP_URL.replace(/\/$/, '')
+      : `${proto}://${host}`;
 
-    // If the user is logged in but tenantId was not provided, look it up server-side.
-    if (userId && !tenantId) {
+    // A checkout from inside the app is bound to the logged-in user's own business —
+    // identity comes from the session, never from the request body.
+    if (!isPreRegistration) {
       const supabase = await createServerSupabaseClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        return NextResponse.json({ error: 'Debes iniciar sesión para continuar.' }, { status: 401 });
+      }
       const { data: tenant } = await supabase
         .from('tenants')
         .select('id')
-        .eq('owner_id', userId)
+        .eq('owner_id', user.id)
         .single();
-      if (tenant) tenantId = (tenant as any).id;
+      userId = user.id;
+      tenantId = tenant?.id ?? null;
     }
 
     const externalReference = JSON.stringify({
@@ -89,6 +97,10 @@ export async function POST(request: NextRequest) {
       ? appUrl
       : (process.env.NEXT_PUBLIC_APP_URL?.startsWith('https://') ? process.env.NEXT_PUBLIC_APP_URL : 'https://ape.teolabs.app');
 
+    if (!email) {
+      return NextResponse.json({ error: 'El correo es obligatorio para la suscripción mensual.' }, { status: 400 });
+    }
+
     const preapproval = new PreApproval(mercadoPagoClient);
     const result = await preapproval.create({
       body: {
@@ -99,7 +111,7 @@ export async function POST(request: NextRequest) {
           transaction_amount: plan.priceMonthly,
           currency_id: 'CLP',
         },
-        payer_email: email || 'usuario@hungryape.com',
+        payer_email: email,
         back_url: isPreRegistration
           ? `${httpsBase}/login?mode=signup&payment_status=success&plan=${planId}&email=${encodeURIComponent(email || '')}&business=${encodeURIComponent(businessName || '')}`
           : `${httpsBase}/suscripcion/exito?plan=${planId}&type=subscription`,

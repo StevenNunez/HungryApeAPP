@@ -24,6 +24,28 @@ const PLAN_NAMES: Record<PlanId, string> = {
   enterprise: 'Enterprise',
 };
 
+// "Desarrollado por Teo Labs ®": cada letra de un color del degradado azul → morado → verde
+// (los clientes de correo no soportan texto con degradado) y el signo oficial al lado.
+const TEO_LABS_GRADIENT = ['#2563eb', '#5b52f4', '#8b5cf6', '#a855f7', '#6f9a7a', '#35b36b', '#2ebd68', '#22c55e'];
+function teoLabsSignature(): string {
+  const letters = 'Teo Labs'
+    .split('')
+    .map((ch, i) => (ch === ' ' ? ' ' : `<span style="color:${TEO_LABS_GRADIENT[i]};">${ch}</span>`))
+    .join('');
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? 'https://ape.teolabs.app';
+  return `Desarrollado por
+                <a href="https://www.teolabs.app" target="_blank" rel="noopener noreferrer" style="text-decoration:none;font-weight:700;"><img src="${base}/brand/teolabs-isotipo.png" width="14" height="14" alt="" style="vertical-align:-2px;border:0;margin-right:3px;">${letters}</a> ®`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ─── Welcome email HTML template ─────────────────────────────────────────────
 function buildWelcomeHtml(businessName: string, planId: PlanId, dashboardUrl: string): string {
   const planName = PLAN_NAMES[planId] ?? 'Gratis';
@@ -123,8 +145,7 @@ function buildWelcomeHtml(businessName: string, planId: PlanId, dashboardUrl: st
           <tr>
             <td style="background:#f3f4f6;padding:20px 40px;text-align:center;border-top:1px solid #e5e7eb;">
               <p style="margin:0;font-size:12px;color:#9ca3af;">
-                © 2026 Hungry Ape Fast Food App — Desarrollado por
-                <a href="https://teolabs.app" style="color:#9ca3af;">Teo Labs</a>
+                © 2026 Hungry Ape Fast Food App — ${teoLabsSignature()}
               </p>
             </td>
           </tr>
@@ -229,8 +250,7 @@ function buildExpiringHtml(businessName: string, daysLeft: number, pricingUrl: s
           <tr>
             <td style="background:#f3f4f6;padding:20px 40px;text-align:center;border-top:1px solid #e5e7eb;">
               <p style="margin:0;font-size:12px;color:#9ca3af;">
-                © 2026 Hungry Ape Fast Food App — Desarrollado por
-                <a href="https://teolabs.app" style="color:#9ca3af;">Teo Labs</a>
+                © 2026 Hungry Ape Fast Food App — ${teoLabsSignature()}
               </p>
             </td>
           </tr>
@@ -256,7 +276,7 @@ export async function sendWelcomeEmail({
   to,
   businessName,
   planId,
-  dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://hungryape.cl'}/dashboard`,
+  dashboardUrl = `${process.env.NEXT_PUBLIC_APP_URL ?? 'https://ape.teolabs.app'}/dashboard`,
 }: WelcomeEmailParams): Promise<void> {
   const transporter = createTransporter();
 
@@ -266,11 +286,11 @@ export async function sendWelcomeEmail({
     from: `"Hungry Ape 🦍" <${process.env.ZOHO_SMTP_USER}>`,
     to,
     subject: `¡Bienvenido a Hungry Ape, ${businessName}! Tu food truck digital está listo 🍌`,
-    html: buildWelcomeHtml(businessName, planId, dashboardUrl),
+    html: buildWelcomeHtml(escapeHtml(businessName), planId, dashboardUrl),
     text: `¡Bienvenido a Hungry Ape!\n\nHola ${businessName},\n\nTu cuenta fue creada exitosamente con el Plan ${planName}.\n\nIngresa a tu dashboard: ${dashboardUrl}\n\n¿Dudas? Escríbenos a hola@teolabs.app\n\n© 2026 Hungry Ape`,
   });
 
-  console.log(`✅ Welcome email sent to ${to} (plan: ${planId})`);
+  console.log(`✅ Welcome email sent (plan: ${planId})`);
 }
 
 export interface SubscriptionExpiringEmailParams {
@@ -299,9 +319,9 @@ export async function sendSubscriptionExpiringEmail({
     from: `"Hungry Ape 🦍" <${process.env.ZOHO_SMTP_USER}>`,
     to,
     subject,
-    html: buildExpiringHtml(businessName, daysLeft, pricingUrl),
+    html: buildExpiringHtml(escapeHtml(businessName), daysLeft, pricingUrl),
     text: `Hola ${businessName},\n\nTu prueba de Hungry Ape vence en ${daysLeft} día${daysLeft === 1 ? '' : 's'}.\n\nActiva tu plan ahora para no perder el acceso: ${pricingUrl}\n\n¿Dudas? Escríbenos a hola@teolabs.app`,
   });
 
-  console.log(`✅ Expiring reminder sent to ${to} (daysLeft: ${daysLeft})`);
+  console.log(`✅ Expiring reminder sent (daysLeft: ${daysLeft})`);
 }

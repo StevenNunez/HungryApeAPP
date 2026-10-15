@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetFooter
 import { useCart } from '@/hooks/useCart';
 import { formatCLP } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
-import { createOrder as supabaseCreateOrder, getEffectivePlan } from '@/lib/data';
+import { createOrder as supabaseCreateOrder } from '@/lib/data';
 import type { OrderType } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
@@ -19,7 +19,7 @@ import Image from 'next/image';
 type Step = 'cart' | 'payment';
 
 // Payment method config
-type PaymentMethod = 'cash' | 'transfer' | 'card' | 'qr';
+type PaymentMethod = 'cash' | 'transfer' | 'card' | 'qr' | 'online';
 
 const PAYMENT_METHODS: {
     id: PaymentMethod;
@@ -47,11 +47,11 @@ const PAYMENT_METHODS: {
             instruction: 'Acércate a caja con tu ticket para pagar con tarjeta de débito o crédito.',
         },
         {
-            id: 'qr',
-            label: 'App / QR',
+            id: 'online',
+            label: 'Pagar online',
             icon: <Smartphone className="h-5 w-5" />,
-            instruction: 'Paga directamente con tu aplicación favorita y muestra la confirmación.',
-            badge: 'Digital'
+            instruction: 'Paga ahora con tarjeta de crédito, débito o tu cuenta de Mercado Pago. Tu pedido pasa a cocina apenas se confirme el pago.',
+            badge: 'Online'
         },
     ];
 
@@ -63,6 +63,7 @@ export function Cart() {
     const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null);
     const [isConfirming, setIsConfirming] = useState(false);
     const [tenantPlan, setTenantPlan] = useState<string>('gratis');
+    const [onlineEnabled, setOnlineEnabled] = useState(false);
 
     const { cartItems, removeFromCart, updateQuantity, clearCart, cartTotal } = useCart();
     const router = useRouter();
@@ -76,24 +77,34 @@ export function Cart() {
     useEffect(() => {
         if (open && tenantSlug) {
             const supabase = createClient();
-            supabase
-                .from('tenants')
-                .select('plan_id, subscription_status, trial_ends_at')
-                .eq('slug', tenantSlug)
-                .single()
-                .then(({ data }) => {
-                    const d = data as any;
-                    if (d) setTenantPlan(getEffectivePlan(d));
-                });
+            (async () => {
+                let { data } = await supabase
+                    .from('tenants_public')
+                    .select('effective_plan, online_payments')
+                    .eq('slug', tenantSlug)
+                    .single();
+                // Older databases (before migration 016) do not have online_payments yet
+                if (!data) {
+                    ({ data } = (await supabase
+                        .from('tenants_public')
+                        .select('effective_plan')
+                        .eq('slug', tenantSlug)
+                        .single()) as any);
+                }
+                const d = data as any;
+                if (d?.effective_plan) setTenantPlan(d.effective_plan);
+                setOnlineEnabled(!!d?.online_payments);
+            })();
         }
     }, [open, tenantSlug]);
 
     // Filter payment methods based on plan
     const visiblePaymentMethods = PAYMENT_METHODS.filter(method => {
+        if (method.id === 'online') return onlineEnabled; // only when the business connected Mercado Pago
         if (tenantPlan === 'gratis' || tenantPlan === 'starter') {
             return method.id === 'cash' || method.id === 'transfer';
         }
-        return true; // card + qr only for pro/enterprise
+        return true; // card only for plans above starter
     });
 
     const reset = () => {
@@ -133,7 +144,7 @@ export function Cart() {
         setIsConfirming(true);
 
         try {
-            const order = await supabaseCreateOrder(tenantSlug, nickname, cartItems, cartTotal, selectedPayment, orderType);
+            const order = await supabaseCreateOrder(tenantSlug, nickname, cartItems, selectedPayment, orderType);
 
             toast({
                 title: '¡Pedido enviado a cocina! 🍳',
@@ -142,15 +153,35 @@ export function Cart() {
 
             clearCart();
             handleOpenChange(false);
+
+            // Online payment: go straight to Mercado Pago. If it cannot start, the tracking
+            // page offers a "Pagar ahora" button for this same order.
+            if (selectedPayment === 'online') {
+                try {
+                    const res = await fetch(`/api/orders/${order.id}/pay`, { method: 'POST' });
+                    const json = await res.json();
+                    if (res.ok && json.url) {
+                        window.location.href = json.url;
+                        return;
+                    }
+                } catch { /* fall through to the tracking page */ }
+            }
             router.push(`/m/${tenantSlug}/pedido/${order.id}?code=${order.pickupCode}`);
         } catch (err: any) {
             console.error('Order error:', err);
-            const isLimitReached = err.message?.includes('LIMIT_REACHED');
+            const msg: string = err.message ?? '';
+            const isLimitReached = msg.includes('LIMIT_REACHED');
+            const isOutOfStock = msg.includes('OUT_OF_STOCK') || msg.includes('PRODUCT_NOT_FOUND');
+            const isTooMany = msg.includes('TOO_MANY_PENDING');
 
             toast({
-                title: isLimitReached ? 'Local muy ocupado 😥' : 'Error al confirmar',
+                title: isLimitReached ? 'Local muy ocupado 😥' : isOutOfStock ? 'Producto agotado' : isTooMany ? 'Demasiados pedidos seguidos' : 'Error al confirmar',
                 description: isLimitReached
                     ? 'Este local ha alcanzado el límite de pedidos por hoy. Por favor, realiza tu pago o pide directamente en caja.'
+                    : isTooMany
+                    ? 'Ya tienes pedidos pendientes de pago en este local. Págalos en caja o espera unos minutos antes de pedir de nuevo.'
+                    : isOutOfStock
+                    ? 'Alguno de los productos de tu carrito se agotó. Revisa el menú y vuelve a intentarlo.'
                     : 'No se pudo crear tu pedido. Inténtalo de nuevo.',
                 variant: 'destructive',
             });
@@ -328,10 +359,11 @@ export function Cart() {
                                             placeholder="¿Tu apodo?"
                                             value={nickname}
                                             onChange={(e) => setNickname(e.target.value)}
+                                            maxLength={30}
                                             className="bg-muted border-0 h-12 pl-10 rounded-xl focus:ring-2 ring-primary/20 transition-all font-medium"
                                         />
                                     </div>
-                                    <NicknameSuggester onNicknameSelect={setNickname} />
+                                    <NicknameSuggester onNicknameSelect={(n) => setNickname(n.slice(0, 30))} />
                                 </div>
 
                                 <div className="space-y-2">

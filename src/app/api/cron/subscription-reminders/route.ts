@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceSupabaseClient } from '@/lib/supabase/server';
 import { sendSubscriptionExpiringEmail } from '@/lib/email';
+import { rejectUnlessCron } from '@/lib/cron-auth';
 
 /**
  * GET /api/cron/subscription-reminders
@@ -9,10 +10,8 @@ import { sendSubscriptionExpiringEmail } from '@/lib/email';
  * Finds tenants whose trial ends in exactly 7, 3, or 1 day and sends a reminder.
  */
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  if (process.env.CRON_SECRET && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
+  const denied = rejectUnlessCron(request);
+  if (denied) return denied;
 
   const supabase = createServiceSupabaseClient();
   const now = new Date();
@@ -29,8 +28,8 @@ export async function GET(request: NextRequest) {
     const windowEnd = new Date(windowStart);
     windowEnd.setUTCHours(23, 59, 59, 999);
 
-    const { data: tenants, error } = await (supabase
-      .from('tenants') as any)
+    const { data: tenants, error } = await supabase
+      .from('tenants')
       .select('id, name, owner_id')
       .eq('subscription_status', 'trial')
       .gte('trial_ends_at', windowStart.toISOString())

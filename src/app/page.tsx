@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { TeoLabsCredit } from '@/components/compartido/TeoLabsCredit';
 import {
   QrCode, ChefHat, Smartphone, Shield, BarChart3, Zap, ArrowRight,
   Boxes, Banknote, SlidersHorizontal, CheckCircle, Star, Clock
@@ -6,7 +7,7 @@ import {
 import { PricingSection } from '@/components/inicio/PricingSection';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 
-const features = [
+const features: { icon: React.ElementType; title: string; description: string; badge?: string }[] = [
   {
     icon: QrCode,
     title: 'Menú QR con Categorías',
@@ -441,6 +442,7 @@ export default async function LandingPage() {
           <p className="text-xs text-muted-foreground">
             © 2026 Hungry Ape — Hecho en Chile 🇨🇱 — Todos los derechos reservados.
           </p>
+          <TeoLabsCredit />
           <div className="flex gap-4 text-xs text-muted-foreground">
             <Link href="/terminos" className="hover:text-foreground transition-colors">Términos</Link>
             <Link href="/privacidad" className="hover:text-foreground transition-colors">Privacidad</Link>

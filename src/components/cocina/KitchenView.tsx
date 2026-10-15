@@ -33,7 +33,7 @@ export function KitchenView({ tenantSlug, compact = false }: KitchenViewProps) {
     async function load() {
       const supabase = createClient();
       const { data: tenant } = await supabase
-        .from('tenants')
+        .from('tenants_public')
         .select('id')
         .eq('slug', tenantSlug)
         .single();

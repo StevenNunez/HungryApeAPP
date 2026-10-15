@@ -3,6 +3,7 @@ import { CartProvider } from '@/context/CartContext';
 import { Cart } from '@/components/carrito/Cart';
 import { Logo } from '@/components/compartido/Logo';
 import Link from 'next/link';
+import { TeoLabsCredit } from '@/components/compartido/TeoLabsCredit';
 
 export default function CustomerMenuLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -21,6 +22,7 @@ export default function CustomerMenuLayout({ children }: { children: React.React
             <p className="text-sm text-muted-foreground">
               Powered by <Link href="/" className="font-brand text-foreground hover:text-primary transition-colors">Hungry Ape</Link>
             </p>
+            <TeoLabsCredit />
           </div>
         </footer>
       </div>

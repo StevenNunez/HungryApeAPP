@@ -33,7 +33,8 @@ export function OrderCard({ order, onStatusChange }: OrderCardProps) {
     cash: '💵 Efectivo',
     card: '💳 Tarjeta',
     transfer: '📱 Transferencia',
-    qr: '📲 QR/App'
+    qr: '📲 QR/App',
+    online: '🌐 Pago online'
   };
 
   const isLlevar = order.orderType === 'llevar';
@@ -67,6 +68,7 @@ export function OrderCard({ order, onStatusChange }: OrderCardProps) {
           <span>{formatDistanceToNow(order.createdAt, { addSuffix: true, locale: es })}</span>
           <span className="font-bold text-xs bg-muted px-2 py-0.5 rounded-md">
             {paymentLabels[order.paymentMethod] || order.paymentMethod}
+            {order.paymentMethod === 'online' && (order.paidOnline ? ' · ✅ pagado' : ' · esperando pago')}
           </span>
         </CardDescription>
       </CardHeader>

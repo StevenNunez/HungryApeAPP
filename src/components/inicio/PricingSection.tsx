@@ -6,13 +6,14 @@ import { Loader2, Check, X, Store, Mail, ArrowRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import { SUBSCRIPTION_PLANS, formatPlanPrice } from '@/lib/plans';
 
 const plans = [
   {
     id: 'basico',
     name: 'Básico',
-    priceMonthly: '$4.990',
-    priceAnnual: '$3.992',
+    priceMonthly: formatPlanPrice(SUBSCRIPTION_PLANS.basico.priceMonthly),
+    priceAnnual: formatPlanPrice(SUBSCRIPTION_PLANS.basico.priceAnnualPerMonth),
     period: '/mes',
     cancelText: '14 días gratis · Sin tarjeta',
     description: 'Todo lo que necesitas para digitalizar tu food truck. Empieza gratis hoy.',
@@ -32,8 +33,8 @@ const plans = [
   {
     id: 'starter',
     name: 'Starter',
-    priceMonthly: '$14.990',
-    priceAnnual: '$11.990',
+    priceMonthly: formatPlanPrice(SUBSCRIPTION_PLANS.starter.priceMonthly),
+    priceAnnual: formatPlanPrice(SUBSCRIPTION_PLANS.starter.priceAnnualPerMonth),
     period: '/mes',
     cancelText: 'Cancela cuando quieras',
     description: 'Para el food truck que ya vende y necesita control total de su operación.',
@@ -52,19 +53,20 @@ const plans = [
   {
     id: 'pro',
     name: 'Pro',
-    priceMonthly: '$29.990',
-    priceAnnual: '$23.990',
+    priceMonthly: formatPlanPrice(SUBSCRIPTION_PLANS.pro.priceMonthly),
+    priceAnnual: formatPlanPrice(SUBSCRIPTION_PLANS.pro.priceAnnualPerMonth),
     period: '/mes',
     cancelText: 'Cancela cuando quieras',
-    description: 'Cobra automático y optimiza cada detalle de tu operación.',
+    description: 'Cobra online, avisa a tus clientes y sabe cuánto ganas realmente en cada producto.',
     badge: null,
     features: [
       'Todo lo de Starter',
-      'Pagos online integrados (Tarjeta / Débito / Apps)',
-      'Notificaciones al cliente por WhatsApp',
+      'Pagos online con tu cuenta de Mercado Pago (tarjeta, débito y apps): se activan al conectarla y el dinero llega directo a ti',
+      'Aviso de "tu pedido está listo" en el celular del cliente, por notificación y por WhatsApp (desde el número de Hungry Ape)',
       'Costo por producto y análisis de margen',
-      'Reportes avanzados exportables (PDF / Excel)',
+      'Reportes exportables en PDF y Excel',
       'Tiempos de preparación por producto',
+      'Alertas de reposición con costo estimado',
     ],
     cta: 'Subir a Pro',
     popular: false,
@@ -72,19 +74,18 @@ const plans = [
   {
     id: 'enterprise',
     name: 'Enterprise',
-    priceMonthly: '$79.990',
-    priceAnnual: '$63.990',
+    priceMonthly: formatPlanPrice(SUBSCRIPTION_PLANS.enterprise.priceMonthly),
+    priceAnnual: formatPlanPrice(SUBSCRIPTION_PLANS.enterprise.priceAnnualPerMonth),
     period: '/mes',
     cancelText: 'Cancela cuando quieras',
     description: 'Control total para cadenas, franquicias y operaciones con múltiples puntos.',
     badge: null,
     features: [
       'Todo lo de Pro',
-      'Multi-sucursales desde un solo dashboard',
-      'Múltiples cajeros y administradores',
-      'Control de insumos y recetas con descuento automático',
-      'Integración con POS externo',
-      'Alertas de reposición con costo estimado',
+      'Próximamente: multi-sucursales desde un solo dashboard',
+      'Próximamente: múltiples cajeros y administradores',
+      'Próximamente: control de insumos y recetas',
+      'Integraciones a medida (POS externo): cotiza con nosotros',
     ],
     cta: 'Contactar Ventas',
     popular: false,

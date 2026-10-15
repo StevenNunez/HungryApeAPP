@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import Link from 'next/link';
 import { getEffectivePlan } from '@/lib/data';
 import { ImageUploader } from '@/components/ui/image-uploader';
+import { OnlinePaymentsCard } from '@/components/configuracion/OnlinePaymentsCard';
 
 export default function ConfigurationPage() {
   const router = useRouter();
@@ -222,6 +223,11 @@ export default function ConfigurationPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* ── Pagos online (Mercado Pago, Pro) ── */}
+        <Suspense fallback={null}>
+          <OnlinePaymentsCard />
+        </Suspense>
 
         {/* ── Suscripción ── */}
         <SubscriptionCard

@@ -7,8 +7,6 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://ape.teolabs.app';
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   themeColor: [{ media: '(prefers-color-scheme: dark)', color: '#0a0a0a' }],
 };
 
@@ -70,7 +68,7 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         {/* Luckiest Guy for brand logo, Poppins for body */}
         <link
-          href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Poppins:wght@400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Poppins:wght@400;500;600;700&family=Lexend:wght@700&display=swap"
           rel="stylesheet"
         />
       </head>

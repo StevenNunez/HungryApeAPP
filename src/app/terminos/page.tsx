@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { TeoLabsCredit } from '@/components/compartido/TeoLabsCredit';
 import { ArrowLeft } from 'lucide-react';
 import type { Metadata } from 'next';
 
@@ -181,6 +182,7 @@ export default function TerminosPage() {
       <footer className="border-t border-border py-8 mt-12">
         <div className="container mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-muted-foreground">© 2026 Hungry Ape SpA — Todos los derechos reservados.</p>
+          <TeoLabsCredit />
           <div className="flex gap-4 text-xs text-muted-foreground">
             <Link href="/terminos" className="hover:text-foreground transition-colors font-medium text-foreground">Términos</Link>
             <Link href="/privacidad" className="hover:text-foreground transition-colors">Privacidad</Link>

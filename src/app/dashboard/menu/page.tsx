@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { useTenant } from '@/hooks/useTenant';
 import { getEffectivePlan } from '@/lib/data';
+import { isProPlan } from '@/lib/plans';
 import { TenantGate } from '@/components/compartido/TenantGate';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatCLP } from '@/lib/utils';
@@ -49,6 +50,9 @@ export default function MenuManagementPage() {
   const [newGroupType, setNewGroupType] = useState<'checkbox' | 'radio'>('checkbox');
   const [newGroupRequired, setNewGroupRequired] = useState(false);
   const [newOptionInputs, setNewOptionInputs] = useState<Record<string, { name: string; price: string }>>({});
+
+  // Cost & restock fields (margin reports, restock estimates) are a Pro feature
+  const canUseCosts = tenant ? isProPlan(getEffectivePlan(tenant)) : false;
 
   // Derive categories dynamically from products
   const categories = ['Todos', ...Array.from(new Set(products.map(p => p.category).filter(Boolean)))];
@@ -199,10 +203,9 @@ const PRODUCT_LIMITS: Record<string, number> = {
       .select('*, product_modifier_options(*)')
       .single();
     if (gErr || !group) return;
-    const g = group as any;
-    const optionRows = preset.options.map((name, i) => ({ group_id: g.id, tenant_id: tenant.id, name, price_delta: 0, sort_order: i }));
+    const optionRows = preset.options.map((name, i) => ({ group_id: group.id, tenant_id: tenant.id, name, price_delta: 0, sort_order: i }));
     const { data: opts } = await supabase.from('product_modifier_options').insert(optionRows).select();
-    setModifierGroups([...modifierGroups, { ...(group as any), product_modifier_options: opts || [] }]);
+    setModifierGroups([...modifierGroups, { ...group, product_modifier_options: opts || [] }]);
     toast({ title: `✅ Grupo "${preset.name}" creado`, description: 'Puedes editar o agregar más opciones.' });
   }
 
@@ -222,7 +225,7 @@ const PRODUCT_LIMITS: Record<string, number> = {
       .select('*, product_modifier_options(*)')
       .single();
     if (err || !data) { toast({ title: 'Error', description: err?.message, variant: 'destructive' }); return; }
-    setModifierGroups([...modifierGroups, { ...(data as any), product_modifier_options: [] }]);
+    setModifierGroups([...modifierGroups, { ...data, product_modifier_options: [] }]);
     setNewGroupName('');
     setNewGroupRequired(false);
   }
@@ -567,6 +570,37 @@ const PRODUCT_LIMITS: Record<string, number> = {
                     value={editProduct.stock || ''}
                     onFocus={e => e.target.select()}
                     onChange={e => setEditProduct({ ...editProduct, stock: e.target.value === '' ? 0 : Number(e.target.value) })}
+                    className="rounded-2xl h-12"
+                  />
+                </div>
+                {/* Costos (Pro): margen y reposición */}
+                <div>
+                  <label className="text-xs font-bold uppercase pl-1 block mb-1">
+                    Costo ($) {!canUseCosts && <span className="text-primary">· Pro</span>}
+                  </label>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder={canUseCosts ? 'Lo que te cuesta hacerlo' : 'Disponible en Pro'}
+                    disabled={!canUseCosts}
+                    value={editProduct.cost ?? ''}
+                    onFocus={e => e.target.select()}
+                    onChange={e => setEditProduct({ ...editProduct, cost: e.target.value === '' ? null : Number(e.target.value) })}
+                    className="rounded-2xl h-12"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold uppercase pl-1 block mb-1">
+                    Reponer hasta (uds.) {!canUseCosts && <span className="text-primary">· Pro</span>}
+                  </label>
+                  <Input
+                    type="number"
+                    min={0}
+                    placeholder={canUseCosts ? 'Stock objetivo al comprar' : 'Disponible en Pro'}
+                    disabled={!canUseCosts}
+                    value={editProduct.restock_target ?? ''}
+                    onFocus={e => e.target.select()}
+                    onChange={e => setEditProduct({ ...editProduct, restock_target: e.target.value === '' ? null : Number(e.target.value) })}
                     className="rounded-2xl h-12"
                   />
                 </div>

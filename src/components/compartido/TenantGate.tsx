@@ -1,8 +1,10 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Loader2, AlertCircle, LogIn, Plus } from 'lucide-react';
-import { TenantStatus } from '@/hooks/useTenant';
+import { TenantStatus, NO_TENANT_MESSAGE } from '@/hooks/useTenant';
 
 interface TenantGateProps {
   status: TenantStatus;
@@ -10,6 +12,23 @@ interface TenantGateProps {
 }
 
 export function TenantGate({ status, error }: TenantGateProps) {
+  const router = useRouter();
+  // A freshly confirmed account (email link or Google) has no business yet:
+  // send it straight to the setup wizard instead of showing an error screen.
+  const needsSetup = status === 'not_found' && error === NO_TENANT_MESSAGE;
+  useEffect(() => {
+    if (needsSetup) router.replace('/dashboard/setup');
+  }, [needsSetup, router]);
+
+  if (needsSetup) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-muted-foreground font-medium">Preparando tu negocio...</p>
+      </div>
+    );
+  }
+
   if (status === 'loading') {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">

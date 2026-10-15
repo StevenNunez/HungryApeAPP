@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server';
 import { createServiceSupabaseClient } from '@/lib/supabase/server';
+import { rateLimit } from '@/lib/rate-limit';
 
 const DEMO_TENANT_ID = 'a0000000-0000-0000-0000-000000000001';
 
 export async function POST() {
+  // Public endpoint (the /demo page calls it on load): throttle so it cannot be
+  // hammered to wipe a demo someone else is in the middle of using.
+  if (!rateLimit('demo-cleanup', 1, 15_000)) {
+    return NextResponse.json({ ok: true, skipped: true });
+  }
+
   try {
     const supabase = createServiceSupabaseClient();
 

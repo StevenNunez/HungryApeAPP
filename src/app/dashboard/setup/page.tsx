@@ -55,7 +55,7 @@ export default function SetupPage() {
 
     const trialEndsAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
 
-    const { data: tenant, error } = await (supabase.from('tenants') as any).insert({
+    const { data: tenant, error } = await supabase.from('tenants').insert({
       slug,
       name: businessName,
       owner_id: user.id,
@@ -77,7 +77,7 @@ export default function SetupPage() {
       fetch('/api/email/welcome', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to: u.email, businessName, planId: 'gratis' }),
+        body: JSON.stringify({ businessName }),
       }).catch(() => {});
     });
 
@@ -99,7 +99,7 @@ export default function SetupPage() {
     }
 
     const supabase = createClient();
-    const { error } = await (supabase.from('products') as any).insert({
+    const { error } = await supabase.from('products').insert({
       tenant_id: tenantId,
       name: productName,
       price,

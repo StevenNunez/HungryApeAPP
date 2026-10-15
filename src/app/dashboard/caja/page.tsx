@@ -149,7 +149,7 @@ export default function CajaPage() {
       .eq('tenant_id', tenantId)
       .neq('status', 'Por Pagar')
       .gte('created_at', sess.opened_at)
-      .order('created_at', { ascending: false }) as any;
+      .order('created_at', { ascending: false });
     setSessionOrders(data || []);
   }, []);
 
@@ -159,7 +159,7 @@ export default function CajaPage() {
       .from('cash_withdrawals')
       .select('*')
       .eq('session_id', sess.id)
-      .order('created_at', { ascending: false }) as any;
+      .order('created_at', { ascending: false });
     setWithdrawals(data || []);
   }, []);
 
@@ -169,7 +169,7 @@ export default function CajaPage() {
     if (!user) { router.push('/login'); return; }
 
     const { data: t } = await supabase
-      .from('tenants').select('*').eq('owner_id', user.id).single() as any;
+      .from('tenants').select('*').eq('owner_id', user.id).single();
     if (!t) { router.push('/dashboard'); return; }
     setTenant(t);
 
@@ -184,7 +184,7 @@ export default function CajaPage() {
       .select('*')
       .eq('tenant_id', t.id)
       .eq('status', 'open')
-      .maybeSingle() as any;
+      .maybeSingle();
 
     setSession(openSess || null);
     if (openSess) {
@@ -200,7 +200,7 @@ export default function CajaPage() {
       .eq('tenant_id', t.id)
       .eq('status', 'closed')
       .order('closed_at', { ascending: false })
-      .limit(20) as any;
+      .limit(20);
     setHistory(hist || []);
 
     setLoading(false);
@@ -240,7 +240,7 @@ export default function CajaPage() {
       tenant_id: tenant.id,
       opened_by: user!.id,
       opening_amount: amount,
-    }).select().single() as any;
+    }).select().single();
 
     if (error) {
       toast({ title: 'Error al abrir caja', description: error.message, variant: 'destructive' });
@@ -273,7 +273,7 @@ export default function CajaPage() {
       tenant_id: tenant.id,
       amount,
       reason: withdrawReason.trim(),
-    }) as any;
+    });
 
     if (error) {
       toast({ title: 'Error al registrar egreso', description: error.message, variant: 'destructive' });
@@ -302,7 +302,7 @@ export default function CajaPage() {
       closed_at: new Date().toISOString(),
       closing_amount: amount,
       notes: closingNotes,
-    }).eq('id', session.id) as any;
+    }).eq('id', session.id);
 
     if (error) {
       toast({ title: 'Error al cerrar caja', description: error.message, variant: 'destructive' });
@@ -321,20 +321,20 @@ export default function CajaPage() {
     if (historyOrders[sess.id] !== undefined) return;
     const supabase = createClient();
 
-    const ordersQuery = supabase
+    let ordersQuery = supabase
       .from('orders')
       .select('id, nickname, short_id, payment_method, total, status, created_at')
       .eq('tenant_id', tenant.id)
       .neq('status', 'Por Pagar')
       .gte('created_at', sess.opened_at);
-    if (sess.closed_at) (ordersQuery as any).lte('created_at', sess.closed_at);
-    const { data: orders } = await (ordersQuery as any).order('created_at', { ascending: false });
+    if (sess.closed_at) ordersQuery = ordersQuery.lte('created_at', sess.closed_at);
+    const { data: orders } = await ordersQuery.order('created_at', { ascending: false });
 
     const { data: wds } = await supabase
       .from('cash_withdrawals')
       .select('*')
       .eq('session_id', sess.id)
-      .order('created_at', { ascending: false }) as any;
+      .order('created_at', { ascending: false });
 
     setHistoryOrders(prev => ({ ...prev, [sess.id]: orders || [] }));
     setHistoryWithdrawals(prev => ({ ...prev, [sess.id]: wds || [] }));

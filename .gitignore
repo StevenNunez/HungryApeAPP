@@ -46,3 +46,18 @@ next-env.d.ts
 .env.local
 
 .vercel
+
+# .env.example SÍ se versiona (documenta las variables necesarias)
+!.env.example
+
+# Archivos internos / de desarrollo con IA: no van al repo de producción
+CLAUDE.md
+docs/
+.agents/
+skills-lock.json
+.modified
+metadata.json
+public/Sin título.png
+
+# Scripts de demo/desarrollo (no van al deploy)
+scripts/

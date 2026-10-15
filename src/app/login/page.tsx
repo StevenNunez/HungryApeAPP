@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { TeoLabsCredit } from '@/components/compartido/TeoLabsCredit';
 import { Eye, EyeOff, Loader2, ArrowLeft, Mail, CheckCircle } from 'lucide-react';
 
 // ─── Google icon ──────────────────────────────────────────────────────────────
@@ -44,6 +45,15 @@ function LoginForm() {
     const error = searchParams.get('error');
     if (error === 'auth_callback_failed') {
       toast({ title: 'Error de autenticación', description: 'El enlace expiró o es inválido. Inténtalo de nuevo.', variant: 'destructive' });
+    }
+    // Back from the checkout of a plan bought before having an account
+    const payment = searchParams.get('payment_status');
+    if (payment === 'success') {
+      toast({ title: '¡Pago recibido! 🎉', description: 'Crea tu cuenta con este mismo correo y tu plan se activa solo.' });
+    } else if (payment === 'pending') {
+      toast({ title: 'Pago pendiente', description: 'Cuando se acredite, crea tu cuenta con el mismo correo y tu plan se activará.' });
+    } else if (payment === 'failure') {
+      toast({ title: 'No se pudo completar el pago', description: 'Puedes intentarlo de nuevo desde los planes.', variant: 'destructive' });
     }
   }, [searchParams, toast]);
 
@@ -136,7 +146,7 @@ function LoginForm() {
             owner_id: authData.user.id,
             subscription_status: 'trial',
             trial_ends_at: trialEndsAt,
-          } as any);
+          });
 
           if (tenantError) {
             console.error('Tenant creation error:', tenantError);
@@ -147,7 +157,7 @@ function LoginForm() {
         fetch('/api/email/welcome', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ to: email, businessName, planId: 'gratis' }),
+          body: JSON.stringify({ businessName }),
         }).catch(() => {});
 
         toast({ title: '🦍 ¡Bienvenido a Hungry Ape!', description: 'Tu food truck digital está listo.' });
@@ -383,6 +393,7 @@ function LoginForm() {
       </Card>
 
       <p className="mt-8 text-xs text-muted-foreground">© 2026 Hungry Ape — Todos los derechos reservados.</p>
+      <TeoLabsCredit className="mt-2" />
     </div>
   );
 }
