@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Eye, EyeOff, Loader2, KeyRound } from 'lucide-react';
+import { mensajeParaPersona } from '@/lib/errores';
 
 export default function UpdatePasswordPage() {
   const router = useRouter();
@@ -53,7 +54,7 @@ export default function UpdatePasswordPage() {
     const { error } = await supabase.auth.updateUser({ password });
 
     if (error) {
-      toast({ title: 'Error al actualizar contraseña', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error al actualizar contraseña', description: mensajeParaPersona(error, 'cambiar contraseña'), variant: 'destructive' });
       setLoading(false);
       return;
     }

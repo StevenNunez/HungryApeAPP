@@ -1,9 +1,15 @@
+import { cache } from 'react';
+import { canTakeOrders } from '@/lib/plans';
+
+const DEMO_TENANT_ID = 'a0000000-0000-0000-0000-000000000001';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { mapProductRow, mapModifierGroupRow } from '@/lib/types';
 import type { MenuItem, ModifierGroup } from '@/lib/types';
 
 export interface TenantMenu {
   tenant: { id: string; name: string; description: string | null; logoUrl: string | null };
+  /** False after the trial when no plan was activated: the menu shows, orders pause. */
+  ordersOpen: boolean;
   items: MenuItem[];
   groups: Record<string, ModifierGroup[]>;
 }
@@ -11,14 +17,17 @@ export interface TenantMenu {
 /**
  * Server-side fetch for the public menu page: tenant + products + modifier groups,
  * so the customer's phone receives the menu already rendered (no spinner / waterfall).
- * Returns null when the slug does not exist.
+ * Returns null when the slug does not exist. Wrapped in React `cache()` so
+ * generateMetadata and the page share a single fetch per request.
  */
-export async function getTenantMenu(slug: string): Promise<TenantMenu | null> {
+export const getTenantMenu = cache(fetchTenantMenu);
+
+async function fetchTenantMenu(slug: string): Promise<TenantMenu | null> {
   const supabase = await createServerSupabaseClient();
 
   const { data: tenant } = await supabase
     .from('tenants_public')
-    .select('id, name, description, logo_url')
+    .select('id, name, description, logo_url, effective_plan')
     .eq('slug', slug)
     .maybeSingle();
   if (!tenant) return null;
@@ -48,6 +57,7 @@ export async function getTenantMenu(slug: string): Promise<TenantMenu | null> {
   }
 
   return {
+    ordersOpen: tenant.id === DEMO_TENANT_ID || canTakeOrders((tenant as any).effective_plan),
     tenant: {
       id: tenant.id,
       name: tenant.name,

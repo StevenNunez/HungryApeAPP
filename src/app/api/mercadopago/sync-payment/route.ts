@@ -3,6 +3,7 @@ import { Payment } from 'mercadopago';
 import { mercadoPagoClient, SUBSCRIPTION_PLANS, type PlanId } from '@/lib/mercadopago';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { activateTenant, parseReference } from '@/lib/billing';
+import { anotarError } from '@/lib/errores-servidor';
 
 const MAX_PAYMENT_AGE_MS = 48 * 60 * 60 * 1000;
 
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, planId: plan.id, paymentId: paymentData.id });
   } catch (error: any) {
-    console.error('Sync payment error:', error?.cause ?? error);
+    await anotarError({ origen: 'servidor', donde: 'api/mercadopago/sync-payment', error: error?.cause ?? error });
     return NextResponse.json({ error: 'No se pudo sincronizar el pago' }, { status: 500 });
   }
 }

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Loader2, AlertCircle, LogIn, Plus } from 'lucide-react';
 import { TenantStatus, NO_TENANT_MESSAGE } from '@/hooks/useTenant';
+import { PanelSkeleton } from './PanelSkeleton';
 
 interface TenantGateProps {
   status: TenantStatus;
@@ -30,10 +31,19 @@ export function TenantGate({ status, error }: TenantGateProps) {
   }
 
   if (status === 'loading') {
+    return <PanelSkeleton label="Cargando tu negocio…" />;
+  }
+
+  if (status === 'blocked') {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-primary" />
-        <p className="text-muted-foreground font-medium">Cargando tu negocio...</p>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-6 p-6 text-center">
+        <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center">
+          <AlertCircle className="h-10 w-10 text-muted-foreground" />
+        </div>
+        <div>
+          <h1 className="font-brand text-3xl uppercase tracking-wide mb-2">Acceso en pausa</h1>
+          <p className="text-muted-foreground max-w-sm">{error}</p>
+        </div>
       </div>
     );
   }
@@ -82,7 +92,7 @@ export function TenantGate({ status, error }: TenantGateProps) {
             href="/dashboard"
             className="inline-flex items-center gap-2 bg-muted text-foreground font-bold px-6 py-3 rounded-2xl hover:bg-muted/80 transition-all"
           >
-            Volver al Dashboard
+            Volver al panel
           </Link>
         </div>
         <p className="text-xs text-muted-foreground">

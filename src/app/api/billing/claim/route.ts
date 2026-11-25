@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { claimPendingActivation } from '@/lib/billing';
+import { anotarError } from '@/lib/errores-servidor';
 
 /**
  * POST /api/billing/claim
@@ -24,7 +25,7 @@ export async function POST() {
     const planId = await claimPendingActivation(user.id, user.email);
     return NextResponse.json({ claimed: planId });
   } catch (err: any) {
-    console.error('[billing/claim]', err?.message ?? err);
+    await anotarError({ origen: 'servidor', donde: 'api/billing/claim', error: err?.cause ?? err });
     return NextResponse.json({ error: 'No se pudo aplicar el pago' }, { status: 500 });
   }
 }

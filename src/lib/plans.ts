@@ -16,7 +16,7 @@ export const SUBSCRIPTION_PLANS = {
     priceMonthly: 4990,
     priceAnnualPerMonth: 3992,
     get priceAnnualTotal() { return this.priceAnnualPerMonth * 12; }, // 47904
-    description: 'Hungry Ape Básico — Menú digital + QR + Cocina en tiempo real',
+    description: 'Hungry Ape Básico — Menú digital + QR + Cocina en tiempo real (hasta 40 pedidos/día)',
   },
   starter: {
     id: 'starter',
@@ -25,7 +25,7 @@ export const SUBSCRIPTION_PLANS = {
     priceMonthly: 14990,
     priceAnnualPerMonth: 11990,
     get priceAnnualTotal() { return this.priceAnnualPerMonth * 12; }, // 143880
-    description: 'Hungry Ape Starter — Menú digital + QR + Cocina en tiempo real',
+    description: 'Hungry Ape Starter — Pedidos ilimitados + Caja + Inventario y analíticas',
   },
   pro: {
     id: 'pro',
@@ -34,7 +34,7 @@ export const SUBSCRIPTION_PLANS = {
     priceMonthly: 29990,
     priceAnnualPerMonth: 23990,
     get priceAnnualTotal() { return this.priceAnnualPerMonth * 12; }, // 287880
-    description: 'Hungry Ape Pro — Todo de Starter + Pedidos ilimitados + Analíticas',
+    description: 'Hungry Ape Pro — Todo lo de Starter + Pagos online + Avisos al cliente + Rentabilidad',
   },
   enterprise: {
     id: 'enterprise',
@@ -43,11 +43,29 @@ export const SUBSCRIPTION_PLANS = {
     priceMonthly: 79990,
     priceAnnualPerMonth: 63990,
     get priceAnnualTotal() { return this.priceAnnualPerMonth * 12; }, // 767880
-    description: 'Hungry Ape Enterprise — Multi-sucursales + API + Manager dedicado',
+    description: 'Hungry Ape Enterprise — Todo lo de Pro + Equipo con roles',
   },
 } as const;
 
 export type PlanId = keyof typeof SUBSCRIPTION_PLANS;
+
+/** How each plan is called everywhere in the UI and emails (one place, so they can't drift). */
+export const PLAN_LABEL: Record<PlanId | 'gratis', string> = {
+  gratis: 'Sin plan activo',
+  basico: 'Plan Básico',
+  starter: 'Plan Starter',
+  pro: 'Plan Pro',
+  enterprise: 'Plan Enterprise',
+};
+
+/** Short name ("Básico") — for sentences like "Todo lo de Básico". */
+export const PLAN_SHORT_NAME: Record<PlanId | 'gratis', string> = {
+  gratis: 'Sin plan activo',
+  basico: SUBSCRIPTION_PLANS.basico.name,
+  starter: SUBSCRIPTION_PLANS.starter.name,
+  pro: SUBSCRIPTION_PLANS.pro.name,
+  enterprise: SUBSCRIPTION_PLANS.enterprise.name,
+};
 
 /** 4990 → "$4.990" (Chilean thousands separator, no Intl dependency). */
 export function formatPlanPrice(amount: number): string {
@@ -65,6 +83,52 @@ export function planAtLeast(plan: string | null | undefined, min: (typeof PLAN_O
 
 /** Pro features: cost & margin, exports, prep times, "order ready" alerts, online payments. */
 export const isProPlan = (plan: string | null | undefined) => planAtLeast(plan, 'pro');
+
+// ─── What each plan includes — exactly what the landing (PricingSection) promises ───
+// The database enforces the same numbers (create_order, products trigger, RLS of the
+// cash register and team, migration 020). Change both together.
+
+/**
+ * Whether customers can order through the app. After the 14-day trial (Starter level)
+ * a business must activate Básico: without a plan the menu stays visible but orders pause.
+ */
+export const canTakeOrders = (plan: string | null | undefined) => planAtLeast(plan, 'basico');
+
+/** Orders per day (Chile calendar day). Básico: "Hasta 40 pedidos/día"; Starter: "sin límite". Without a plan: 0. */
+export function dailyOrderLimit(plan: string | null | undefined): number | null {
+  if (!canTakeOrders(plan)) return 0;
+  return planAtLeast(plan, 'starter') ? null : 40;
+}
+
+/** Active products in the menu. Starter: "Hasta 100 productos"; Básico / no plan: 15. */
+export function productLimit(plan: string | null | undefined): number | null {
+  if (planAtLeast(plan, 'pro')) return null;
+  if (planAtLeast(plan, 'starter')) return 100;
+  return 15;
+}
+
+/** Cash register (open, withdrawals, close with count) — Starter: "Caja: inicio, cierre y arqueo". */
+export const canUseCashRegister = (plan: string | null | undefined) => planAtLeast(plan, 'starter');
+
+/** Live inventory and sales analytics — Starter: "Inventario en vivo", "Analíticas de ventas". */
+export const canUseReports = (plan: string | null | undefined) => planAtLeast(plan, 'starter');
+
+/** Supplies by recipe: every paid sale deducts bread, sausage, avocado… — Pro. */
+export const canUseSupplies = (plan: string | null | undefined) => planAtLeast(plan, 'pro');
+
+/** Team with their own access (managers, kitchen) — Enterprise: "múltiples cajeros y administradores". */
+export const canUseTeam = (plan: string | null | undefined) => planAtLeast(plan, 'enterprise');
+
+/** Payment methods the customer can pick. Básico/Starter: cash and transfer; Pro adds card/QR at the counter. */
+export function allowedPaymentMethods(plan: string | null | undefined, onlineConnected: boolean): string[] {
+  const methods = ['cash', 'transfer'];
+  if (planAtLeast(plan, 'pro')) {
+    methods.push('card', 'qr');
+    // A Mercado Pago account left connected doesn't enable online payments once the plan drops
+    if (onlineConnected) methods.push('online');
+  }
+  return methods;
+}
 
 /**
  * Returns the effective plan for a tenant, accounting for active trials.

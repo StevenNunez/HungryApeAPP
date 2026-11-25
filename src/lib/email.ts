@@ -1,33 +1,59 @@
 import nodemailer from 'nodemailer';
+import { PLAN_SHORT_NAME } from '@/lib/plans';
 
 // ─── Zoho SMTP transporter ────────────────────────────────────────────────────
+// Same mailbox for every Teo Labs app (hola@teolabs.app). Accepts the shared
+// EMAIL_* names and the older ZOHO_SMTP_* / SMTP_* ones.
+const smtpUser = () => process.env.EMAIL_USER || process.env.ZOHO_SMTP_USER || process.env.SMTP_USER;
+const smtpPass = () => process.env.EMAIL_PASS || process.env.ZOHO_SMTP_PASS || process.env.SMTP_PASS;
+
+export function smtpConfigured(): boolean {
+  return !!(smtpUser() && smtpPass());
+}
+
 function createTransporter() {
+  const port = Number(process.env.EMAIL_PORT || process.env.SMTP_PORT || 465);
   return nodemailer.createTransport({
-    host: 'smtp.zoho.com',
-    port: 465,
-    secure: true, // SSL
+    host: process.env.EMAIL_HOST || process.env.SMTP_HOST || 'smtp.zoho.com',
+    port,
+    secure: port === 465, // SSL on 465, STARTTLS otherwise
     auth: {
-      user: process.env.ZOHO_SMTP_USER,   // hola@teolabs.app
-      pass: process.env.ZOHO_SMTP_PASS,   // App password from Zoho
+      user: smtpUser(),   // hola@teolabs.app
+      pass: smtpPass(),   // App password from Zoho
     },
   });
+}
+
+/** Any transactional email. `From` is always the authenticated mailbox; Reply-To can be a person. */
+export async function sendEmail({ to, subject, text, html, replyTo, fromName = 'Hungry Ape 🦍' }: {
+  to: string; subject: string; text: string; html: string; replyTo?: string; fromName?: string;
+}) {
+  // A business name ends up in the From header: strip what could break or inject into it
+  const safeName = fromName.replace(/["<>\\\r\n]/g, '').slice(0, 80);
+  await createTransporter().sendMail({
+    from: `"${safeName}" <${smtpUser()}>`,
+    to,
+    subject,
+    text,
+    html,
+    ...(replyTo ? { replyTo } : {}),
+  });
+}
+
+/** Internal notices to Teo Labs (error alerts, etc.). */
+export async function sendInternalEmail({ to, subject, text, html }: { to: string; subject: string; text: string; html: string }) {
+  await sendEmail({ to, subject, text, html });
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export type PlanId = 'gratis' | 'basico' | 'starter' | 'pro' | 'enterprise';
 
-const PLAN_NAMES: Record<PlanId, string> = {
-  gratis: 'Sin plan activo',
-  basico: 'Básico',
-  starter: 'Starter',
-  pro: 'Pro',
-  enterprise: 'Enterprise',
-};
+const PLAN_NAMES: Record<PlanId, string> = PLAN_SHORT_NAME;
 
 // "Desarrollado por Teo Labs ®": cada letra de un color del degradado azul → morado → verde
 // (los clientes de correo no soportan texto con degradado) y el signo oficial al lado.
 const TEO_LABS_GRADIENT = ['#2563eb', '#5b52f4', '#8b5cf6', '#a855f7', '#6f9a7a', '#35b36b', '#2ebd68', '#22c55e'];
-function teoLabsSignature(): string {
+export function teoLabsSignature(): string {
   const letters = 'Teo Labs'
     .split('')
     .map((ch, i) => (ch === ' ' ? ' ' : `<span style="color:${TEO_LABS_GRADIENT[i]};">${ch}</span>`))
@@ -37,7 +63,7 @@ function teoLabsSignature(): string {
                 <a href="https://www.teolabs.app" target="_blank" rel="noopener noreferrer" style="text-decoration:none;font-weight:700;"><img src="${base}/brand/teolabs-isotipo.png" width="14" height="14" alt="" style="vertical-align:-2px;border:0;margin-right:3px;">${letters}</a> ®`;
 }
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -66,8 +92,8 @@ function buildWelcomeHtml(businessName: string, planId: PlanId, dashboardUrl: st
     gratis: ['Código QR único para tu local', 'Hasta 40 pedidos por día', 'Cocina en tiempo real'],
     basico: ['Hasta 15 productos en tu menú', 'Código QR único para tu local', 'Hasta 40 pedidos por día', 'Cocina en tiempo real'],
     starter: ['Hasta 100 productos en tu menú', 'Pedidos ilimitados', 'Inventario y stock en tiempo real', 'Analíticas de ventas básicas'],
-    pro: ['Todo lo de Starter', 'Pagos online integrados', 'Reportes avanzados PDF/Excel', 'Notificaciones WhatsApp al cliente'],
-    enterprise: ['Todo lo de Pro', 'Multi-sucursales', 'Control de insumos y recetas', 'Soporte prioritario dedicado'],
+    pro: ['Todo lo de Starter', 'Control de insumos por receta', 'Pagos online integrados', 'Reportes avanzados PDF/Excel', 'Notificaciones WhatsApp al cliente'],
+    enterprise: ['Todo lo de Pro', 'Equipo con roles: encargados y cocina con su propia cuenta', 'Soporte prioritario dedicado', 'Próximamente: multi-sucursales'],
   };
 
   const benefitItems = (planBenefits[planId] ?? planBenefits.gratis)
@@ -210,14 +236,14 @@ function buildExpiringHtml(businessName: string, daysLeft: number, pricingUrl: s
               </div>
 
               <p style="margin:0 0 24px;font-size:15px;color:#6b7280;line-height:1.6;">
-                Cuando expire tu prueba, tu cuenta quedará <strong>sin plan activo</strong> con acceso restringido a 40 pedidos/día y sin inventario ni reportes.
-                Activa tu plan ahora para mantener todo sin interrupciones.
+                Cuando expire tu prueba, tu cuenta quedará <strong>sin plan activo</strong>: tus clientes podrán ver el menú, pero <strong>los pedidos por la app quedarán en pausa</strong>.
+                Activa el Plan Básico (desde $4.990/mes) para seguir recibiendo pedidos sin interrupciones.
               </p>
 
               <!-- What you keep -->
               <div style="background:#f3f4f6;border-radius:16px;padding:24px 28px;margin-bottom:28px;">
                 <p style="margin:0 0 14px;font-size:14px;font-weight:700;color:#111827;text-transform:uppercase;letter-spacing:1px;">
-                  Con un plan pagado conservas:
+                  Con el Plan Starter (o superior) conservas:
                 </p>
                 <ul style="margin:0;padding:0 0 0 4px;list-style:none;">
                   <li style="margin-bottom:8px;color:#374151;">✅ Pedidos ilimitados todos los días</li>
@@ -283,7 +309,7 @@ export async function sendWelcomeEmail({
   const planName = PLAN_NAMES[planId] ?? 'Gratis';
 
   await transporter.sendMail({
-    from: `"Hungry Ape 🦍" <${process.env.ZOHO_SMTP_USER}>`,
+    from: `"Hungry Ape 🦍" <${smtpUser()}>`,
     to,
     subject: `¡Bienvenido a Hungry Ape, ${businessName}! Tu food truck digital está listo 🍌`,
     html: buildWelcomeHtml(escapeHtml(businessName), planId, dashboardUrl),
@@ -316,7 +342,7 @@ export async function sendSubscriptionExpiringEmail({
   const subject = subjectMap[daysLeft] ?? `⏰ Tu prueba vence en ${daysLeft} días`;
 
   await transporter.sendMail({
-    from: `"Hungry Ape 🦍" <${process.env.ZOHO_SMTP_USER}>`,
+    from: `"Hungry Ape 🦍" <${smtpUser()}>`,
     to,
     subject,
     html: buildExpiringHtml(escapeHtml(businessName), daysLeft, pricingUrl),

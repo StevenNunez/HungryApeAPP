@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceSupabaseClient } from '@/lib/supabase/server';
 import { fetchSellerPayment, getSellerAccessToken } from '@/lib/mp-seller';
 import { verifyMercadoPagoSignature } from '@/lib/mp-signature';
+import { anotarError } from '@/lib/errores-servidor';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -59,17 +60,21 @@ export async function POST(request: NextRequest) {
       .update({
         paid_online: true,
         online_payment_id: String(payment.id),
-        // A paid order goes straight to the kitchen queue
-        ...(order.status === 'Por Pagar' ? { status: 'Pendiente' } : {}),
+        // A paid order goes straight to the kitchen queue. If it had expired while the
+        // customer was paying, it comes back: the money is in, the kitchen must see it.
+        ...(order.status === 'Por Pagar' || order.status === 'Cancelado' ? { status: 'Pendiente' } : {}),
       })
       .eq('id', order.id);
     if (error) throw error;
+    if (order.status === 'Cancelado') {
+      console.warn(`⚠️  Order ${order.id} was paid online after it expired — reactivated (stock not re-deducted)`);
+    }
 
     console.log(`✅ Order ${order.id} paid online`);
     return NextResponse.json({ received: true });
   } catch (err: any) {
     // 500 → Mercado Pago retries (the update above is idempotent)
-    console.error('orders webhook error:', err?.message ?? err);
+    await anotarError({ origen: 'servidor', donde: 'api/mercadopago/orders-webhook', error: err?.cause ?? err });
     return NextResponse.json({ error: 'Processing failed' }, { status: 500 });
   }
 }

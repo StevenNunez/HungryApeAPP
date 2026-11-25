@@ -1,6 +1,8 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useTenant } from '@/hooks/useTenant';
+import { markQrSeen } from '@/components/inicio/FirstSteps';
 import { TenantGate } from '@/components/compartido/TenantGate';
 import { QRCodeSVG } from 'qrcode.react';
 import { Download, ExternalLink, ChevronLeft, QrCode } from 'lucide-react';
@@ -10,6 +12,9 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 
 export default function QRAdminPage() {
   const { tenant, status, error } = useTenant();
+  // Seeing the QR counts as the "print your QR" first step
+  const tenantId = tenant?.id as string | undefined;
+  useEffect(() => { if (tenantId) markQrSeen(tenantId); }, [tenantId]);
 
   if (status !== 'found') {
     return <TenantGate status={status} error={error} />;
@@ -56,7 +61,7 @@ export default function QRAdminPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
           {/* QR Card */}
-          <Card className="rounded-[3rem] border-0 shadow-2xl overflow-hidden bg-white dark:bg-card">
+          <Card className="rounded-panel border-0 shadow-2xl overflow-hidden bg-white dark:bg-card">
             <CardHeader className="bg-primary pt-12 pb-20 text-center relative overflow-hidden">
               <div className="absolute inset-0 opacity-10 flex flex-wrap gap-4 p-4 pointer-events-none rotate-12 overflow-hidden">
                 {[...Array(20)].map((_, i) => (
@@ -79,7 +84,7 @@ export default function QRAdminPage() {
             </CardHeader>
 
             <CardContent className="-mt-12 relative z-20 flex flex-col items-center pb-8">
-              <div className="p-5 bg-white rounded-[2rem] shadow-2xl mb-6">
+              <div className="p-5 bg-white rounded-panel shadow-2xl mb-6">
                 <QRCodeSVG
                   id="qr-to-download"
                   value={menuUrl}
@@ -105,7 +110,7 @@ export default function QRAdminPage() {
 
           {/* Actions + Tips */}
           <div className="space-y-6">
-            <Card className="rounded-[2.5rem] border-border/50">
+            <Card className="rounded-panel border-border/50">
               <CardHeader>
                 <CardTitle className="text-xl">Opciones de descarga</CardTitle>
                 <CardDescription>Para imprimir en tu local o mesas.</CardDescription>
@@ -122,7 +127,7 @@ export default function QRAdminPage() {
               </CardContent>
             </Card>
 
-            <Card className="rounded-[2.5rem] bg-accent/10 border-accent/20">
+            <Card className="rounded-panel bg-accent/10 border-accent/20">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <QrCode className="h-5 w-5 text-primary" />

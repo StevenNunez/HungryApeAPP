@@ -8,11 +8,7 @@ const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
   : 'lxkyangojadrewbrrzet.supabase.co';
 
 const nextConfig: NextConfig = {
-  // TypeScript errors now fail the build (npm run typecheck is clean).
-  // ESLint is not configured in this repo yet, so it stays off during builds.
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // TypeScript and ESLint errors both fail the build (CI runs them too).
   async headers() {
     return [
       {
@@ -26,14 +22,6 @@ const nextConfig: NextConfig = {
       },
     ];
   },
-  serverExternalPackages: [
-    'genkit',
-    '@genkit-ai/core',
-    '@genkit-ai/googleai',
-    '@genkit-ai/next',
-    '@opentelemetry/sdk-node',
-    '@opentelemetry/api',
-  ],
   images: {
     remotePatterns: [
       {
@@ -47,17 +35,6 @@ const nextConfig: NextConfig = {
         hostname: 'picsum.photos',
       },
     ],
-  },
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      // Ignore the missing @opentelemetry/exporter-jaeger module
-      config.resolve = config.resolve || {};
-      config.resolve.alias = {
-        ...config.resolve.alias,
-        '@opentelemetry/exporter-jaeger': false,
-      };
-    }
-    return config;
   },
 };
 

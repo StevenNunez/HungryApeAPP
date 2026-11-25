@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceSupabaseClient } from '@/lib/supabase/server';
 import { appBaseUrl, createOrderPreference, getSellerAccessToken, isMarketplaceConfigured } from '@/lib/mp-seller';
 import { clientIp, rateLimit } from '@/lib/rate-limit';
+import { anotarError } from '@/lib/errores-servidor';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     });
     return NextResponse.json({ url });
   } catch (err: any) {
-    console.error('order pay failed:', err?.message ?? err);
+    await anotarError({ origen: 'servidor', donde: 'api/orders/pay', error: err?.cause ?? err });
     return NextResponse.json({ error: 'No se pudo iniciar el pago' }, { status: 502 });
   }
 }

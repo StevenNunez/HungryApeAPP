@@ -232,7 +232,7 @@ export default async function LandingPage() {
                   className="group relative bg-card rounded-2xl p-6 border border-border hover:border-primary/40 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl"
                 >
                   {feature.badge && (
-                    <span className="absolute top-4 right-4 text-[10px] font-bold uppercase tracking-wider bg-primary text-primary-foreground px-2 py-0.5 rounded-full">
+                    <span className="absolute top-4 right-4 text-xs font-bold uppercase tracking-wider bg-primary text-primary-foreground px-2 py-0.5 rounded-full">
                       {feature.badge}
                     </span>
                   )}
@@ -291,7 +291,7 @@ export default async function LandingPage() {
                     <p className="font-semibold">Completo Italiano</p>
                     <div className="flex flex-wrap gap-1 mt-1">
                       {['Sin palta', 'Con mayonesa', 'Bien cocido'].map(tag => (
-                        <span key={tag} className="text-[11px] bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full font-medium">{tag}</span>
+                        <span key={tag} className="text-xs bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 rounded-full font-medium">{tag}</span>
                       ))}
                     </div>
                   </div>

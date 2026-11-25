@@ -3,6 +3,7 @@ import { Payment, PreApproval } from 'mercadopago';
 import { mercadoPagoClient, SUBSCRIPTION_PLANS, type PlanId as BillingPlanId } from '@/lib/mercadopago';
 import { activateTenant, resolveTenantId, parseReference, storePendingActivation } from '@/lib/billing';
 import { verifyMercadoPagoSignature } from '@/lib/mp-signature';
+import { anotarError } from '@/lib/errores-servidor';
 
 // ─── Route handlers ────────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
@@ -90,7 +91,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true });
   } catch (error: any) {
     // 500 → Mercado Pago retries. Activation is idempotent, so a retry is safe.
-    console.error('Webhook processing error:', error?.cause ?? error);
+    await anotarError({ origen: 'servidor', donde: 'api/mercadopago/webhook', error: error?.cause ?? error });
     return NextResponse.json({ error: 'Processing failed' }, { status: 500 });
   }
 }

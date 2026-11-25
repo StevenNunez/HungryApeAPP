@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, Check, X, Store, Mail, ArrowRight } from 'lucide-react';
-import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { motion, AnimatePresence } from 'framer-motion';
 import { SUBSCRIPTION_PLANS, formatPlanPrice } from '@/lib/plans';
+import { mensajeParaPersona } from '@/lib/errores';
 
 const plans = [
   {
@@ -19,7 +19,7 @@ const plans = [
     description: 'Todo lo que necesitas para digitalizar tu food truck. Empieza gratis hoy.',
     badge: '14 días gratis 🎉',
     features: [
-      'Menú digital ilimitado',
+      'Menú digital con hasta 15 productos',
       'Código QR personalizado',
       'Pedidos personalizados (salsas, extras, punto de cocción)',
       'Cocina en tiempo real',
@@ -57,13 +57,14 @@ const plans = [
     priceAnnual: formatPlanPrice(SUBSCRIPTION_PLANS.pro.priceAnnualPerMonth),
     period: '/mes',
     cancelText: 'Cancela cuando quieras',
-    description: 'Cobra online, avisa a tus clientes y sabe cuánto ganas realmente en cada producto.',
+    description: 'Cobra online, controla tus insumos y sabe cuánto ganas realmente en cada producto.',
     badge: null,
     features: [
       'Todo lo de Starter',
       'Pagos online con tu cuenta de Mercado Pago (tarjeta, débito y apps): se activan al conectarla y el dinero llega directo a ti',
       'Aviso de "tu pedido está listo" en el celular del cliente, por notificación y por WhatsApp (desde el número de Hungry Ape)',
-      'Costo por producto y análisis de margen',
+      'Control de insumos por receta: cada venta descuenta el pan, la salchicha, la palta… y te avisa qué reponer antes de quedarte sin stock',
+      'Costo por producto (calculado desde la receta) y análisis de margen',
       'Reportes exportables en PDF y Excel',
       'Tiempos de preparación por producto',
       'Alertas de reposición con costo estimado',
@@ -82,9 +83,8 @@ const plans = [
     badge: null,
     features: [
       'Todo lo de Pro',
+      'Equipo con su propia cuenta: encargados y cocina, cada uno solo con los permisos de su rol',
       'Próximamente: multi-sucursales desde un solo dashboard',
-      'Próximamente: múltiples cajeros y administradores',
-      'Próximamente: control de insumos y recetas',
       'Integraciones a medida (POS externo): cotiza con nosotros',
     ],
     cta: 'Contactar Ventas',
@@ -169,7 +169,7 @@ export function PricingSection() {
       if (checkoutUrl) window.location.href = checkoutUrl;
       else throw new Error('No se generó el link de pago');
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+      toast({ title: 'No se pudo completar', description: mensajeParaPersona(err, 'planes'), variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -206,7 +206,7 @@ export function PricingSection() {
     } catch (err: any) {
       toast({
         title: 'Error',
-        description: err.message || 'Inténtalo de nuevo.',
+        description: mensajeParaPersona(err, 'planes'),
         variant: 'destructive',
       });
     } finally {
@@ -238,7 +238,7 @@ export function PricingSection() {
             </button>
             <div className="flex items-center gap-2">
               <span className={`text-sm font-bold ${isAnnual ? 'text-foreground' : 'text-muted-foreground'}`}>Anual</span>
-              <span className="bg-green-500/20 text-green-500 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">Ahorras 20%</span>
+              <span className="bg-green-500/20 text-green-500 text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">Ahorras 20%</span>
             </div>
           </div>
         </div>
@@ -251,19 +251,19 @@ export function PricingSection() {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ delay: idx * 0.1 }}
-              className={`relative flex flex-col p-8 rounded-[2rem] border-2 transition-all duration-300 ${plan.popular
+              className={`relative flex flex-col p-8 rounded-panel border-2 transition-all duration-300 ${plan.popular
                 ? 'bg-card border-primary shadow-[0_0_40px_-10px_rgba(220,38,38,0.3)] scale-105 z-10'
                 : 'bg-card/50 border-border hover:border-primary/30'
                 }`}
             >
               {plan.popular && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-[10px] sm:text-xs font-bold px-6 py-1.5 rounded-full shadow-lg uppercase tracking-wider flex items-center gap-2">
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs sm:text-xs font-bold px-6 py-1.5 rounded-full shadow-lg uppercase tracking-wider flex items-center gap-2">
                   <span>MÁS POPULAR</span>
                   <span className="text-base">🦍</span>
                 </div>
               )}
               {!plan.popular && (plan as any).badge && (
-                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-green-500 text-white text-[10px] sm:text-xs font-bold px-5 py-1.5 rounded-full shadow-lg uppercase tracking-wider whitespace-nowrap">
+                <div className="absolute -top-4 left-1/2 -translate-x-1/2 bg-green-500 text-white text-xs sm:text-xs font-bold px-5 py-1.5 rounded-full shadow-lg uppercase tracking-wider whitespace-nowrap">
                   {(plan as any).badge}
                 </div>
               )}
@@ -278,7 +278,7 @@ export function PricingSection() {
                   <span className="text-5xl font-bold">{isAnnual ? plan.priceAnnual : plan.priceMonthly}</span>
                   <span className="text-muted-foreground font-medium">{plan.period}</span>
                 </div>
-                <div className="mt-2 text-[11px] font-bold text-muted-foreground tracking-widest uppercase">
+                <div className="mt-2 text-xs font-bold text-muted-foreground tracking-widest uppercase">
                   {plan.cancelText}
                 </div>
               </div>
@@ -325,7 +325,7 @@ export function PricingSection() {
               initial={{ opacity: 0, scale: 0.95, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-md bg-card border border-border rounded-[2.5rem] shadow-2xl overflow-hidden"
+              className="relative w-full max-w-md bg-card border border-border rounded-panel shadow-2xl overflow-hidden"
             >
               <button
                 onClick={() => setSelectedPlan(null)}
@@ -380,7 +380,7 @@ export function PricingSection() {
                     {loading ? <Loader2 className="h-6 w-6 animate-spin" /> : 'PAGAR CON MERCADO PAGO'}
                   </button>
 
-                  <p className="text-[10px] text-center text-muted-foreground mt-4 px-6">
+                  <p className="text-xs text-center text-muted-foreground mt-4 px-6">
                     Al proceder, serás redirigido a Mercado Pago para completar tu suscripción de forma segura.
                   </p>
                 </form>

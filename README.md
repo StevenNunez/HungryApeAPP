@@ -46,22 +46,36 @@ Cada local tiene su propia dirección (`/m/mi-food-truck`), su menú, su cocina,
 
 | Módulo | Qué resuelve |
 |---|---|
-| **Cocina** | Pedidos en tiempo real con cada personalización. Se confirma el pago, se pasa a preparación, a listo y a entregado. |
+| **Cocina** | Pedidos en tiempo real con cada personalización y sonido al llegar uno nuevo. Se confirma el pago, se pasa a preparación, a listo y a entregado, con 5 segundos para deshacer un toque equivocado. Si se corta el wifi, avisa y se pone al día sola. Lo que no se empezó a cocinar se puede anular (el stock vuelve al menú) y los pedidos sin pagar por más de una hora se anulan solos. |
 | **Menú** | Productos, categorías, fotos (con compresión automática), stock, grupos de modificadores y archivado en vez de borrado. |
 | **Caja** | Apertura con monto inicial, egresos con motivo, cierre con arqueo automático e historial de turnos. |
 | **Inventario y reportes** | Stock con alertas de nivel bajo, ventas brutas, ventas por día (con rango: hoy, 7 y 30 días, todo) y por método de pago. |
 | **Rentabilidad** *(Pro)* | Costo por producto, margen total y por producto, y cuántas de tus ventas ya tienen costo cargado. El costo queda "congelado" en cada venta: editarlo después no altera el margen histórico. |
 | **Tiempos de preparación** *(Pro)* | Preparación promedio, espera del cliente desde que paga y promedio por producto. |
+| **Insumos por receta** *(Pro)* | Cada producto tiene su receta (1 pan, 1 vienesa, 60 g de palta…) y cada opción puede sumar o restar ("Extra palta", "Sin tomate"). Cuando un pedido se paga se descuentan los insumos y si se anula vuelven. El stock de cada producto sale de sus insumos, así que cuando se acaba el pan los completos se agotan solos en el menú. Compras, mermas, conteos, lista de compras, aviso de "al ritmo de hoy se acaba a las…" y costo real por receta. |
 | **Reposición** *(Pro)* | Para cada producto con stock bajo: cuánto comprar hasta su stock objetivo y cuánto costaría. |
 | **Exportar** *(Pro)* | Reportes en Excel y PDF, generados en el navegador. |
 | **Pagos online** *(Pro)* | Cada local conecta su propia cuenta de Mercado Pago; el cliente paga ahí, el pedido pasa solo a cocina y el dinero llega directo al local. |
 | **QR** | Genera y descarga el QR del local en PNG. |
-| **Configuración** | Nombre, descripción, logo, WhatsApp, datos de transferencia y estado de la suscripción (con cancelación). |
-| **Onboarding** | Un asistente crea el negocio y el primer producto en minutos. |
+| **Equipo** | El dueño invita por correo a su gente con un rol: **encargado** (menú, cocina, caja, reportes) o **cocina** (solo la cocina). Cada uno entra con su cuenta y ve solo lo suyo; la base de datos aplica las mismas reglas. |
+| **Configuración** | Nombre, descripción, logo, WhatsApp, datos de transferencia, equipo y estado de la suscripción (con cancelación). |
+| **Primeros pasos** | Un asistente crea el negocio y el primer producto; después, una guía de tres pasos (menú, QR y pedido de prueba) hasta recibir el primer pedido. |
 
 ### Planes
 
-Prueba gratuita de 14 días con funciones de Starter. Después: Básico, Starter, Pro y Enterprise, mensual o anual (con descuento). Los precios viven en un solo archivo (`src/lib/plans.ts`) y alimentan tanto la web como el cobro. Las funciones Pro se activan solas según el plan del local.
+Prueba gratuita de 14 días con funciones de Starter. Después el local activa su plan, mensual o anual (con descuento). Sin un plan activo el menú sigue visible, pero los pedidos por la app quedan en pausa hasta activarlo.
+
+| | Básico | Starter | Pro | Enterprise |
+|---|:-:|:-:|:-:|:-:|
+| Menú por QR, cocina en vivo, pedidos a medida | ✓ | ✓ | ✓ | ✓ |
+| Pedidos por día | 40 | Sin límite | Sin límite | Sin límite |
+| Productos activos | 15 | 100 | Sin límite | Sin límite |
+| Cobro | Efectivo y transferencia | Efectivo y transferencia | + tarjeta/QR en caja y pago online | ✓ |
+| Caja, inventario y analíticas | — | ✓ | ✓ | ✓ |
+| Insumos por receta, rentabilidad, tiempos, reposición, exportar, avisos al cliente | — | — | ✓ | ✓ |
+| Equipo (encargados y cocina con cuenta propia) | — | — | — | ✓ |
+
+Precios y reglas viven en un solo archivo (`src/lib/plans.ts`), que alimenta la web, el panel y el cobro; la base de datos aplica los mismos límites (pedidos, productos, medios de pago, caja y equipo), así que no dependen de la pantalla.
 
 ---
 
@@ -108,8 +122,8 @@ Prueba gratuita de 14 días con funciones de Starter. Después: Básico, Starter
 | Avisos | Web Push (VAPID) y WhatsApp Business Cloud API |
 | Reportes | jsPDF y write-excel-file, cargados solo al exportar |
 | Correos | Nodemailer sobre Zoho SMTP |
-| IA | Genkit + Google AI (sugerencia de apodos) |
-| Pruebas | Vitest |
+| IA | Gemini por API REST (sugerencia de apodos) |
+| Calidad | Vitest, ESLint y GitHub Actions (tipos, lint y pruebas en cada push) |
 | Hosting | Vercel (con crons) |
 
 ---
@@ -122,9 +136,9 @@ cp .env.example .env.local     # completa las variables
 npm run dev                    # http://localhost:3000
 ```
 
-**Base de datos:** ejecuta en el SQL Editor de Supabase, en orden, los archivos de `supabase/migrations/` (001 a la última). Opcionalmente `supabase/seeds/demo-products.sql` para cargar el local de demostración.
+**Base de datos:** ejecuta en el SQL Editor de Supabase, en orden de nombre, los archivos de `supabase/migrations/` (001, 002…, 010, 010b, 011… hasta la última). Juntos reconstruyen el esquema completo desde una base vacía. Opcionalmente `supabase/seeds/demo-products.sql` para cargar el local de demostración.
 
-**Variables de entorno** (detalle en `.env.example`): Supabase (URL, clave pública y clave de servicio), `NEXT_PUBLIC_APP_URL`, Mercado Pago (token, clave pública y secreto del webhook), SMTP de Zoho, clave de Google AI y `CRON_SECRET`. Las funciones Pro suman, y cada una se activa solo cuando sus variables existen: llaves VAPID (avisos push), credenciales de WhatsApp Cloud API (avisos por WhatsApp) y `MP_CLIENT_ID` / `MP_CLIENT_SECRET` / `PAYMENTS_ENC_KEY` (pagos online).
+**Variables de entorno** (detalle en `.env.example`): Supabase (URL, clave pública y clave de servicio), `NEXT_PUBLIC_APP_URL`, Mercado Pago (token, clave pública y secreto del webhook), SMTP de Zoho (`EMAIL_*` o `ZOHO_SMTP_*`), clave de Google AI y `CRON_SECRET`. `AVISO_ERRORES_A` (opcional) define a quién llegan los avisos de errores nuevos. Las funciones Pro suman, y cada una se activa solo cuando sus variables existen: llaves VAPID (avisos push), credenciales de WhatsApp Cloud API (avisos por WhatsApp) y `MP_CLIENT_ID` / `MP_CLIENT_SECRET` / `PAYMENTS_ENC_KEY` (pagos online).
 
 **Scripts**
 
@@ -133,7 +147,9 @@ npm run dev                    # http://localhost:3000
 | `npm run dev` | Servidor de desarrollo |
 | `npm run build` | Compilación de producción (falla ante errores de tipos) |
 | `npm run typecheck` | Revisión de tipos |
-| `npm test` | Pruebas del flujo de cobros y la seguridad |
+| `npm run lint` | ESLint (también corre en el build) |
+| `npm test` | Pruebas de cobros, seguridad, caja, errores y utilidades |
+| `npm run test:integracion` | Pruebas contra la base real, solo sobre los locales demo: creación de pedidos y aislamiento entre locales |
 
 ---
 
@@ -154,12 +170,12 @@ src/
 │       ├── orders/[id]/         Cambio de estado (con avisos) y pago online del pedido
 │       ├── push/ · whatsapp/    Avisos de "pedido listo"
 │       ├── subscription/        Cancelación
-│       ├── cron/                Sincronización de suscripciones y recordatorios
+│       ├── cron/                Suscripciones, recordatorios y limpieza (pedidos sin pagar, datos de corta vida)
+│       ├── errores/             Errores que ve una persona en pantalla → registro de errores
 │       └── email/ · demo/       Bienvenida y reinicio de la demo
 ├── components/                  carrito · cocina · menu · pedido · inicio · compartido · ui
-├── lib/                         data (consultas), billing, plans, email, supabase/
-├── hooks/ · context/            Tenant del usuario y carrito
-└── ai/flows/                    Sugerencia de apodos
+├── lib/                         data (consultas), billing, plans, email, errores, nickname, supabase/
+└── hooks/ · context/            Negocio del panel (cargado en el servidor) y carrito
 supabase/migrations/             Esquema, políticas de seguridad y funciones SQL
 tests/                           Pruebas automáticas
 ```
@@ -172,7 +188,7 @@ Pensado para **Vercel**. Los crons se definen en `vercel.json`:
 
 - `check-subscriptions` — cada hora: sincroniza suscripciones y da de baja los planes anuales vencidos.
 - `subscription-reminders` — diario: avisa por correo cuando la prueba está por terminar.
-- `purge` — diario: borra suscripciones push y vínculos de WhatsApp de más de 2 días (datos personales de corta vida).
+- `purge` — diario: borra suscripciones push y vínculos de WhatsApp de más de 2 días (datos personales de corta vida) y anula los pedidos que llevan más de una hora sin pagar, devolviendo su stock.
 
 Ambos exigen `CRON_SECRET`: si la variable no existe, se niegan a ejecutar. En Mercado Pago, apunta las notificaciones de suscripciones a `/api/mercadopago/webhook`, y registra como URL de redirección de la app de marketplace `<tu-dominio>/api/payments/connect/callback`. En Meta, el webhook de WhatsApp es `/api/whatsapp/webhook`.
 
@@ -186,6 +202,10 @@ Ambos exigen `CRON_SECRET`: si la variable no existe, se niegan a ejecutar. En M
 - El optimizador de imágenes solo acepta los orígenes del propio proyecto.
 - Los tokens de Mercado Pago de cada local se guardan cifrados (AES-256-GCM) y el flujo de conexión usa un `state` firmado y con vencimiento.
 - Los endpoints de avisos aceptan únicamente servicios push reales (sin riesgo de SSRF), tienen límites por IP y los números de WhatsApp se borran apenas se envía el aviso.
+- El costo de cada producto vive en una tabla aparte que solo ve el dueño: nunca viaja al menú público ni por tiempo real.
+- Las fotos solo se pueden subir, cambiar o borrar en la carpeta del propio local.
+- Roles por local (dueño, encargado, cocina) aplicados en la base de datos, no solo en la pantalla. Las invitaciones viajan con un enlace privado que vence en 7 días, solo se guarda su huella y únicamente se acepta con el mismo correo invitado.
+- Registro de errores: lo que falla en el servidor o en pantalla queda agrupado en la tabla `errores` y el primer caso de cada error nuevo llega por correo a Teo Labs.
 
 ---
 

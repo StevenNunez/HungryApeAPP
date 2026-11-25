@@ -1,8 +1,14 @@
 import type { Metadata, Viewport } from 'next';
+import { Luckiest_Guy, Poppins, Lexend } from 'next/font/google';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://ape.teolabs.app';
+
+// Self-hosted by next/font: no render-blocking request to Google, no layout shift.
+const poppins = Poppins({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-poppins', display: 'swap' });
+const luckiestGuy = Luckiest_Guy({ subsets: ['latin'], weight: '400', variable: '--font-luckiest', display: 'swap' });
+const lexend = Lexend({ subsets: ['latin'], weight: '700', variable: '--font-lexend', display: 'swap' });
 
 export const viewport: Viewport = {
   width: 'device-width',
@@ -72,16 +78,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="es">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        {/* Luckiest Guy for brand logo, Poppins for body */}
-        <link
-          href="https://fonts.googleapis.com/css2?family=Luckiest+Guy&family=Poppins:wght@400;500;600;700&family=Lexend:wght@700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
+    <html lang="es" className={`${poppins.variable} ${luckiestGuy.variable} ${lexend.variable}`}>
       <body className="font-body antialiased">
         {children}
         <Toaster />

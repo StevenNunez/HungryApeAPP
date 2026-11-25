@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useState, useMemo, ReactNode } from 'react';
+import { createContext, useState, useMemo, useEffect, useRef, ReactNode } from 'react';
 import type { CartItem, MenuItem, SelectedModifier } from '@/lib/types';
 
 interface CartContextType {
@@ -10,17 +10,48 @@ interface CartContextType {
   updateQuantity: (cartKey: string, quantity: number) => void;
   clearCart: () => void;
   cartTotal: number;
+  /** False when the business has no active plan: the menu shows, ordering pauses. */
+  ordersOpen: boolean;
+  setOrdersOpen: (open: boolean) => void;
 }
 
 export const CartContext = createContext<CartContextType | undefined>(undefined);
+
+/** Max units per cart line — the server (create_order) rejects more. */
+export const MAX_QTY_PER_LINE = 10;
 
 function buildCartKey(itemId: string, modifiers: SelectedModifier[]): string {
   const sortedIds = modifiers.map(m => m.optionId).sort().join(',');
   return `${itemId}__${sortedIds}`;
 }
 
-export function CartProvider({ children }: { children: ReactNode }) {
+/**
+ * `storageKey` (one per business) keeps the cart in sessionStorage, so it survives
+ * switching to the bank app or the phone discarding the tab, and is gone when the tab closes.
+ */
+export function CartProvider({ children, storageKey }: { children: ReactNode; storageKey?: string }) {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [ordersOpen, setOrdersOpen] = useState(true);
+  const hydrated = useRef(false);
+
+  useEffect(() => {
+    hydrated.current = false;
+    if (!storageKey) { hydrated.current = true; return; }
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      const saved = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(saved)) setCartItems(saved.filter(i => i && typeof i.cartKey === 'string' && i.quantity > 0));
+    } catch { /* private mode / corrupt data: start empty */ }
+    hydrated.current = true;
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (!storageKey || !hydrated.current) return;
+    try {
+      if (cartItems.length === 0) sessionStorage.removeItem(storageKey);
+      else sessionStorage.setItem(storageKey, JSON.stringify(cartItems));
+    } catch { /* storage full or blocked: the cart still works in memory */ }
+  }, [cartItems, storageKey]);
 
   const addToCart = (item: MenuItem, modifiers: SelectedModifier[] = []) => {
     const cartKey = buildCartKey(item.id, modifiers);
@@ -30,7 +61,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       const existing = prev.find((i) => i.cartKey === cartKey);
 
       if (existing) {
-        if (existing.quantity >= item.stock) return prev;
+        if (existing.quantity >= Math.min(item.stock, MAX_QTY_PER_LINE)) return prev;
         return prev.map((i) =>
           i.cartKey === cartKey ? { ...i, quantity: i.quantity + 1 } : i
         );
@@ -54,7 +85,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       if (!item) return prev;
       if (quantity <= 0) return prev.filter((i) => i.cartKey !== cartKey);
       return prev.map((i) =>
-        i.cartKey === cartKey ? { ...i, quantity: Math.min(quantity, item.stock) } : i
+        i.cartKey === cartKey ? { ...i, quantity: Math.min(quantity, item.stock, MAX_QTY_PER_LINE) } : i
       );
     });
   };
@@ -67,8 +98,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ cartItems, addToCart, removeFromCart, updateQuantity, clearCart, cartTotal }),
-    [cartItems, cartTotal]
+    () => ({ cartItems, addToCart, removeFromCart, updateQuantity, clearCart, cartTotal, ordersOpen, setOrdersOpen }),
+    [cartItems, cartTotal, ordersOpen]
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

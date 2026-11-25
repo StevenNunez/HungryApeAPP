@@ -1,88 +1,44 @@
 'use client';
 
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
-import {
-  Loader2, ArrowLeft, TrendingUp, CreditCard, ShoppingBag, Award, LockKeyhole,
-  AlertTriangle, Package, CheckCircle2, XCircle, Minus, Plus, Save,
-  Percent, Timer, FileSpreadsheet, FileText, Wallet,
-} from 'lucide-react';
+import { PanelSkeleton } from '@/components/compartido/PanelSkeleton';
+import { useTenant } from '@/hooks/useTenant';
+import { fetchInventory, fetchReportData } from '@/lib/reportes-data';
+import { InventoryTab } from '@/components/reportes/InventoryTab';
+import { LOW_STOCK_THRESHOLD, ProLock, RangePicker, ExportButtons } from '@/components/reportes/parts';
+import { ArrowLeft, TrendingUp, CreditCard, ShoppingBag, Award, LockKeyhole, Percent, Timer } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Link from 'next/link';
 import { formatCLP } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { getEffectivePlan } from '@/lib/data';
-import { isProPlan } from '@/lib/plans';
-import {
-  RANGE_LABELS, rangeStart, computeProfitability, computePrepTimes, computeRestockAlerts,
-  salesByDay as buildSalesByDay, formatMinutes, type ReportRange,
-} from '@/lib/analytics';
+import { isProPlan, canUseReports } from '@/lib/plans';
+import { RANGE_LABELS, computeProfitability, computePrepTimes, computeRestockAlerts, salesByDay as buildSalesByDay, formatMinutes, type ReportRange } from '@/lib/analytics';
 import { exportExcel, exportPdf, type ReportTable } from '@/lib/export';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   ResponsiveContainer, PieChart, Pie, Cell
 } from 'recharts';
+import { mensajeParaPersona } from '@/lib/errores';
 
-const LOW_STOCK_THRESHOLD = 5;
 const COLORS = ['#ef4444', '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6'];
 const PAY_LABELS: Record<string, string> = {
   cash: 'Efectivo', transfer: 'Transferencia', card: 'Tarjeta', qr: 'QR/App', online: 'Pago online',
 };
-const PAGE = 1000; // Supabase returns at most 1000 rows per request
-
-/** Reads every page of a query (Supabase caps a single response at 1000 rows). */
-async function fetchAll<T = any>(
-  build: (from: number, to: number) => PromiseLike<{ data: any[] | null; error: any }>,
-): Promise<T[]> {
-  const out: T[] = [];
-  for (let from = 0; ; from += PAGE) {
-    const { data, error } = await build(from, from + PAGE - 1);
-    if (error) throw error;
-    out.push(...((data ?? []) as T[]));
-    if (!data || data.length < PAGE) break;
-  }
-  return out;
-}
-
-function StockBadge({ stock }: { stock: number | null }) {
-  if (stock === null || stock === undefined) return <Badge variant="outline" className="text-xs">Sin control</Badge>;
-  if (stock === 0) return <Badge className="bg-red-500/10 text-red-500 border-red-500/20 text-xs">Sin stock</Badge>;
-  if (stock <= LOW_STOCK_THRESHOLD) return <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-xs">Stock bajo ({stock})</Badge>;
-  return <Badge className="bg-green-500/10 text-green-500 border-green-500/20 text-xs">{stock} uds.</Badge>;
-}
-
-function ProLock({ feature }: { feature: string }) {
-  return (
-    <Card className="border-primary/40 shadow-xl">
-      <CardContent className="py-16 flex flex-col items-center text-center gap-3">
-        <LockKeyhole className="h-12 w-12 text-primary" />
-        <h3 className="font-brand text-2xl uppercase tracking-wider">Disponible en el Plan Pro</h3>
-        <p className="text-muted-foreground max-w-md text-sm">{feature}</p>
-        <Link href="/#pricing">
-          <Button className="mt-2 rounded-xl font-bold">Ver Planes</Button>
-        </Link>
-      </CardContent>
-    </Card>
-  );
-}
 
 export default function InventarioReportesPage() {
-  const router = useRouter();
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
+  const { tenant: ctxTenant } = useTenant();
   const [tenant, setTenant] = useState<any>(null);
   const [locked, setLocked] = useState(false);
   const [isPro, setIsPro] = useState(false);
 
   // --- Inventario state ---
   const [products, setProducts] = useState<any[]>([]);
-  const [stockEdits, setStockEdits] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState<Record<string, boolean>>({});
 
   // --- Reportes state ---
   const [range, setRange] = useState<ReportRange>('30d');
@@ -92,30 +48,23 @@ export default function InventarioReportesPage() {
   const [exporting, setExporting] = useState<null | 'xlsx' | 'pdf'>(null);
 
   const fetchProducts = useCallback(async (tenantId: string) => {
-    const supabase = createClient();
-    const { data } = await supabase
-      .from('products')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .eq('is_archived', false)
-      .order('category', { ascending: true });
-    setProducts(data || []);
-  }, []);
+    try {
+      setProducts(await fetchInventory(tenantId));
+    } catch (err) {
+      toast({ title: 'No se pudo cargar el inventario', description: mensajeParaPersona(err, 'reportes: inventario'), variant: 'destructive' });
+    }
+  }, [toast]);
 
   // ── Tenant + inventory ────────────────────────────────────────────────────
   useEffect(() => {
     async function loadData() {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.push('/login'); return; }
-
-      const { data: tData } = await supabase
-        .from('tenants').select('*').eq('owner_id', user.id).single();
+      // The business comes already loaded from the panel layout
+      const tData = ctxTenant;
       if (!tData) return;
       setTenant(tData);
 
       const currentPlan = getEffectivePlan(tData);
-      if (currentPlan === 'gratis') {
+      if (!canUseReports(currentPlan)) {
         setLocked(true);
         setLoading(false);
         return;
@@ -125,7 +74,7 @@ export default function InventarioReportesPage() {
       setLoading(false);
     }
     loadData();
-  }, [router, fetchProducts]);
+  }, [ctxTenant, fetchProducts]);
 
   // ── Orders + items for the selected range ─────────────────────────────────
   useEffect(() => {
@@ -135,37 +84,11 @@ export default function InventarioReportesPage() {
     async function loadReport() {
       setReportLoading(true);
       try {
-        const supabase = createClient();
-        const since = rangeStart(range);
-
-        // Timestamps and unit_cost only exist after migration 016 and only matter for Pro
-        const orderCols = isPro
-          ? 'id, total, status, payment_method, created_at, confirmed_at, preparing_at, ready_at'
-          : 'id, total, status, payment_method, created_at';
-        const itemCols = isPro
-          ? 'order_id, product_id, product_name, quantity, price, unit_cost, orders!inner(tenant_id, status, created_at)'
-          : 'order_id, product_id, product_name, quantity, price, orders!inner(tenant_id, status, created_at)';
-
-        const [ords, its] = await Promise.all([
-          fetchAll((from, to) => {
-            let q = supabase.from('orders').select(orderCols)
-              .eq('tenant_id', tenant.id).neq('status', 'Por Pagar')
-              .order('created_at', { ascending: true }).range(from, to);
-            if (since) q = q.gte('created_at', since);
-            return q as any;
-          }),
-          fetchAll((from, to) => {
-            let q = supabase.from('order_items').select(itemCols)
-              .eq('orders.tenant_id', tenant.id).neq('orders.status', 'Por Pagar')
-              .order('id', { ascending: true }).range(from, to);
-            if (since) q = q.gte('orders.created_at', since);
-            return q as any;
-          }),
-        ]);
+        const { orders: ords, items: its } = await fetchReportData(tenant.id, range, isPro);
         if (!cancelled) { setOrders(ords); setItems(its); }
       } catch (err: any) {
         if (!cancelled) {
-          toast({ title: 'No se pudieron cargar los reportes', description: err?.message, variant: 'destructive' });
+          toast({ title: 'No se pudieron cargar los reportes', description: mensajeParaPersona(err, 'reportes'), variant: 'destructive' });
         }
       } finally {
         if (!cancelled) setReportLoading(false);
@@ -302,64 +225,14 @@ export default function InventarioReportesPage() {
         });
       }
     } catch (err: any) {
-      toast({ title: 'No se pudo generar el archivo', description: err?.message, variant: 'destructive' });
+      toast({ title: 'No se pudo generar el archivo', description: mensajeParaPersona(err, 'reportes'), variant: 'destructive' });
     } finally {
       setExporting(null);
     }
   };
 
-  // ── Inventory handlers ────────────────────────────────────────────────────
-  const handleStockSave = async (productId: string) => {
-    const rawVal = stockEdits[productId];
-    if (rawVal === undefined) return;
-    const newStock = parseInt(rawVal, 10);
-    if (isNaN(newStock) || newStock < 0) {
-      toast({ title: 'Stock inválido', description: 'Ingresa un número mayor o igual a 0.', variant: 'destructive' });
-      return;
-    }
-    setSaving(s => ({ ...s, [productId]: true }));
-    const supabase = createClient();
-    const { error } = await supabase.from('products')
-      .update({ stock: newStock, is_available: newStock > 0 })
-      .eq('id', productId);
-    if (error) {
-      toast({ title: 'Error al guardar', description: error.message, variant: 'destructive' });
-    } else {
-      setProducts(ps => ps.map(p => p.id === productId ? { ...p, stock: newStock, is_available: newStock > 0 } : p));
-      setStockEdits(e => { const n = { ...e }; delete n[productId]; return n; });
-      toast({ title: 'Stock actualizado', description: `Stock guardado: ${newStock} unidades.` });
-    }
-    setSaving(s => ({ ...s, [productId]: false }));
-  };
-
-  const handleToggleAvailability = async (productId: string, current: boolean) => {
-    const supabase = createClient();
-    const { error } = await supabase.from('products')
-      .update({ is_available: !current }).eq('id', productId);
-    if (!error) {
-      setProducts(ps => ps.map(p => p.id === productId ? { ...p, is_available: !current } : p));
-    }
-  };
-
-  const handleQuickAdjust = (productId: string, delta: number) => {
-    const current = products.find(p => p.id === productId);
-    const base = stockEdits[productId] !== undefined
-      ? parseInt(stockEdits[productId], 10)
-      : (current?.stock ?? 0);
-    const next = Math.max(0, base + delta);
-    setStockEdits(e => ({ ...e, [productId]: String(next) }));
-  };
-
-  const lowStockProducts = products.filter(p => p.stock !== null && p.stock <= LOW_STOCK_THRESHOLD && p.stock > 0);
-  const outOfStockProducts = products.filter(p => p.stock === 0);
-  const healthyProducts = products.filter(p => p.stock === null || p.stock > LOW_STOCK_THRESHOLD);
-
   if (loading) {
-    return (
-      <div className="flex-1 flex justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+    return <PanelSkeleton label="Cargando reportes…" />;
   }
 
   const lockedUI = (
@@ -408,190 +281,14 @@ export default function InventarioReportesPage() {
           <TabsList className="mb-6 h-auto flex-wrap rounded-2xl bg-muted p-1">
             <TabsTrigger value="inventario" className={tabClass}>Inventario</TabsTrigger>
             <TabsTrigger value="reportes" className={tabClass}>Reportes</TabsTrigger>
-            <TabsTrigger value="rentabilidad" className={tabClass}>Rentabilidad {!isPro && <span className="ml-1.5 text-[10px] font-bold text-primary">PRO</span>}</TabsTrigger>
-            <TabsTrigger value="tiempos" className={tabClass}>Tiempos {!isPro && <span className="ml-1.5 text-[10px] font-bold text-primary">PRO</span>}</TabsTrigger>
+            <TabsTrigger value="rentabilidad" className={tabClass}>Rentabilidad {!isPro && <span className="ml-1.5 text-xs font-bold text-primary">PRO</span>}</TabsTrigger>
+            <TabsTrigger value="tiempos" className={tabClass}>Tiempos {!isPro && <span className="ml-1.5 text-xs font-bold text-primary">PRO</span>}</TabsTrigger>
           </TabsList>
 
           {/* ═══════════════════════════ INVENTARIO TAB ═══════════════════════════ */}
           <TabsContent value="inventario" className="space-y-6">
 
-            {/* Alertas */}
-            {(lowStockProducts.length > 0 || outOfStockProducts.length > 0) && (
-              <div className="space-y-3">
-                {outOfStockProducts.length > 0 && (
-                  <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 rounded-2xl px-5 py-3">
-                    <XCircle className="h-5 w-5 text-red-500 shrink-0" />
-                    <p className="text-sm font-medium text-red-400">
-                      <strong>{outOfStockProducts.length} producto{outOfStockProducts.length > 1 ? 's' : ''} sin stock:</strong>{' '}
-                      {outOfStockProducts.map(p => p.name).join(', ')}
-                    </p>
-                  </div>
-                )}
-                {lowStockProducts.length > 0 && (
-                  <div className="flex items-center gap-3 bg-amber-500/10 border border-amber-500/20 rounded-2xl px-5 py-3">
-                    <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
-                    <p className="text-sm font-medium text-amber-400">
-                      <strong>{lowStockProducts.length} producto{lowStockProducts.length > 1 ? 's' : ''} con stock bajo (≤{LOW_STOCK_THRESHOLD}):</strong>{' '}
-                      {lowStockProducts.map(p => `${p.name} (${p.stock})`).join(', ')}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Reposición con costo estimado (Pro) */}
-            {isPro && restock.alerts.length > 0 && (
-              <Card className="border-amber-500/30 bg-amber-500/5">
-                <CardHeader className="pb-2">
-                  <CardTitle className="font-brand uppercase tracking-wider text-lg flex items-center gap-2">
-                    <Wallet className="h-5 w-5 text-amber-500" /> Reposición estimada
-                  </CardTitle>
-                  <CardDescription>
-                    Para llegar al stock objetivo de cada producto.{' '}
-                    {restock.withoutCost > 0 && `${restock.withoutCost} sin costo u objetivo cargado (se carga en Mi Menú).`}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="divide-y divide-border text-sm">
-                    {restock.alerts.map(a => (
-                      <div key={a.id} className="flex items-center justify-between py-2 gap-3">
-                        <span className="font-medium truncate">{a.name}</span>
-                        <span className="text-muted-foreground shrink-0">
-                          stock {a.stock}{a.toBuy !== null ? ` · comprar ${a.toBuy}` : ''}
-                        </span>
-                        <span className="font-bold shrink-0 w-28 text-right">
-                          {a.estimatedCost === null ? '—' : formatCLP(a.estimatedCost)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="flex justify-between pt-3 mt-1 border-t border-border font-bold">
-                    <span>Total estimado</span>
-                    <span>{formatCLP(restock.totalEstimatedCost)}</span>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Resumen cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Card className="border-green-500/20 bg-green-500/5">
-                <CardContent className="pt-5 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1">Stock OK</p>
-                    <p className="text-3xl font-brand">{healthyProducts.length}</p>
-                  </div>
-                  <CheckCircle2 className="h-8 w-8 text-green-500 opacity-80" />
-                </CardContent>
-              </Card>
-              <Card className="border-amber-500/20 bg-amber-500/5">
-                <CardContent className="pt-5 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1">Stock Bajo</p>
-                    <p className="text-3xl font-brand">{lowStockProducts.length}</p>
-                  </div>
-                  <AlertTriangle className="h-8 w-8 text-amber-500 opacity-80" />
-                </CardContent>
-              </Card>
-              <Card className="border-red-500/20 bg-red-500/5">
-                <CardContent className="pt-5 flex items-center justify-between">
-                  <div>
-                    <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-1">Sin Stock</p>
-                    <p className="text-3xl font-brand">{outOfStockProducts.length}</p>
-                  </div>
-                  <XCircle className="h-8 w-8 text-red-500 opacity-80" />
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Tabla de productos */}
-            {products.length === 0 ? (
-              <Card className="border-border">
-                <CardContent className="py-16 flex flex-col items-center gap-3 text-muted-foreground">
-                  <Package className="h-12 w-12 opacity-30" />
-                  <p className="text-sm">No tienes productos activos. Agrégalos desde <Link href="/dashboard/menu" className="text-primary underline">Mi Menú</Link>.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card className="border-border overflow-hidden">
-                <CardHeader className="pb-0 border-b border-border">
-                  <div className="flex items-center justify-between pb-4">
-                    <CardTitle className="font-brand uppercase tracking-wider text-xl">Productos</CardTitle>
-                    <span className="text-xs text-muted-foreground">{products.length} producto{products.length !== 1 ? 's' : ''}</span>
-                  </div>
-                </CardHeader>
-                <div className="divide-y divide-border">
-                  {products.map(product => {
-                    const editVal = stockEdits[product.id];
-                    const displayStock = editVal !== undefined ? editVal : String(product.stock ?? '');
-                    const isDirty = editVal !== undefined;
-                    const isSaving = saving[product.id];
-
-                    return (
-                      <div key={product.id} className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-4 hover:bg-muted/40 transition-colors">
-                        {/* Info */}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-semibold text-sm truncate">{product.name}</span>
-                            {product.category && (
-                              <Badge variant="outline" className="text-[10px] px-2 py-0">{product.category}</Badge>
-                            )}
-                            <StockBadge stock={product.stock} />
-                          </div>
-                          <p className="text-xs text-muted-foreground mt-0.5">
-                            {formatCLP(product.price)}
-                            {isPro && product.cost !== null && product.cost !== undefined && ` · costo ${formatCLP(Number(product.cost))}`}
-                          </p>
-                        </div>
-
-                        {/* Disponibilidad toggle */}
-                        <button
-                          onClick={() => handleToggleAvailability(product.id, product.is_available)}
-                          className={`text-xs font-semibold px-3 py-1.5 rounded-xl border transition-all shrink-0 ${
-                            product.is_available
-                              ? 'bg-green-500/10 text-green-500 border-green-500/20 hover:bg-green-500/20'
-                              : 'bg-muted text-muted-foreground border-border hover:bg-muted/80'
-                          }`}
-                        >
-                          {product.is_available ? 'Disponible' : 'No disponible'}
-                        </button>
-
-                        {/* Control de stock */}
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <button
-                            onClick={() => handleQuickAdjust(product.id, -1)}
-                            className="h-8 w-8 rounded-lg border border-border hover:bg-muted flex items-center justify-center transition-colors"
-                          >
-                            <Minus className="h-3.5 w-3.5" />
-                          </button>
-                          <Input
-                            type="number"
-                            min={0}
-                            value={displayStock}
-                            onChange={e => setStockEdits(ed => ({ ...ed, [product.id]: e.target.value }))}
-                            className="h-8 w-20 text-center text-sm rounded-lg [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
-                          />
-                          <button
-                            onClick={() => handleQuickAdjust(product.id, 1)}
-                            className="h-8 w-8 rounded-lg border border-border hover:bg-muted flex items-center justify-center transition-colors"
-                          >
-                            <Plus className="h-3.5 w-3.5" />
-                          </button>
-                          <Button
-                            size="sm"
-                            disabled={!isDirty || isSaving}
-                            onClick={() => handleStockSave(product.id)}
-                            className="h-8 px-3 rounded-lg"
-                          >
-                            {isSaving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </Card>
-            )}
+            <InventoryTab products={products} setProducts={setProducts} restock={restock} isPro={isPro} />
           </TabsContent>
 
           {/* Selector de rango + exportación (compartido por las pestañas de reportes) */}
@@ -611,7 +308,7 @@ export default function InventarioReportesPage() {
                       <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-1">Ventas Brutas</p>
                       <h3 className="text-3xl font-brand tracking-tighter text-foreground">{formatCLP(totalSales)}</h3>
                     </div>
-                    <div className="h-12 w-12 bg-green-500/10 text-green-500 rounded-2xl flex items-center justify-center">
+                    <div className="h-12 w-12 bg-green-500/10 text-green-800 rounded-2xl flex items-center justify-center">
                       <TrendingUp className="h-6 w-6" />
                     </div>
                   </CardContent>
@@ -625,7 +322,7 @@ export default function InventarioReportesPage() {
                         {totalOrders} <span className="text-sm font-normal text-muted-foreground lowercase">completados</span>
                       </h3>
                     </div>
-                    <div className="h-12 w-12 bg-blue-500/10 text-blue-500 rounded-2xl flex items-center justify-center">
+                    <div className="h-12 w-12 bg-blue-500/10 text-blue-800 rounded-2xl flex items-center justify-center">
                       <ShoppingBag className="h-6 w-6" />
                     </div>
                   </CardContent>
@@ -754,7 +451,7 @@ export default function InventarioReportesPage() {
                         <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-1">Ventas con costo</p>
                         <h3 className="text-3xl font-brand tracking-tighter">{profit.coveragePct.toFixed(0)}%</h3>
                         {profit.coveragePct < 100 && (
-                          <p className="text-xs text-amber-600 mt-1">
+                          <p className="text-xs text-amber-800 mt-1">
                             Carga el costo en <Link href="/dashboard/menu" className="underline">Mi Menú</Link> para medir todo.
                           </p>
                         )}
@@ -789,12 +486,12 @@ export default function InventarioReportesPage() {
                         <tbody className="divide-y divide-border">
                           {profit.rows.map(r => (
                             <tr key={r.key} className="hover:bg-muted/30">
-                              <td className="px-5 py-3 font-medium">{r.name}{!r.complete && <span className="ml-2 text-[10px] text-amber-600 font-bold">SIN COSTO</span>}</td>
+                              <td className="px-5 py-3 font-medium">{r.name}{!r.complete && <span className="ml-2 text-xs text-amber-800 font-bold">SIN COSTO</span>}</td>
                               <td className="text-right px-3 py-3">{r.units}</td>
                               <td className="text-right px-3 py-3">{formatCLP(r.revenue)}</td>
                               <td className="text-right px-3 py-3">{formatCLP(r.cost)}</td>
                               <td className="text-right px-3 py-3 font-bold">{formatCLP(r.margin)}</td>
-                              <td className={`text-right px-5 py-3 font-bold ${r.marginPct !== null && r.marginPct < 30 ? 'text-red-500' : 'text-green-600'}`}>
+                              <td className={`text-right px-5 py-3 font-bold ${r.marginPct !== null && r.marginPct < 30 ? 'text-red-700' : 'text-green-800'}`}>
                                 {r.marginPct === null ? '—' : `${r.marginPct.toFixed(0)}%`}
                               </td>
                             </tr>
@@ -874,49 +571,6 @@ export default function InventarioReportesPage() {
           </TabsContent>
         </Tabs>
       )}
-    </div>
-  );
-}
-
-// ─── Small shared pieces ──────────────────────────────────────────────────────
-
-function RangePicker({ range, onChange, loading }: { range: ReportRange; onChange: (r: ReportRange) => void; loading: boolean }) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {(Object.keys(RANGE_LABELS) as ReportRange[]).map(r => (
-        <button
-          key={r}
-          onClick={() => onChange(r)}
-          className={`text-xs font-semibold px-3.5 py-2 rounded-xl border transition-all ${
-            range === r ? 'bg-primary text-primary-foreground border-primary shadow-md' : 'border-border text-muted-foreground hover:border-primary/50'
-          }`}
-        >
-          {RANGE_LABELS[r]}
-        </button>
-      ))}
-      {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-    </div>
-  );
-}
-
-function ExportButtons({ isPro, exporting, onExport }: { isPro: boolean; exporting: null | 'xlsx' | 'pdf'; onExport: (k: 'xlsx' | 'pdf') => void }) {
-  if (!isPro) {
-    return (
-      <Link href="/#pricing" className="text-xs font-semibold text-primary underline">
-        Descargar Excel / PDF: disponible en Pro
-      </Link>
-    );
-  }
-  return (
-    <div className="flex items-center gap-2">
-      <Button variant="outline" size="sm" className="rounded-xl" disabled={exporting !== null} onClick={() => onExport('xlsx')}>
-        {exporting === 'xlsx' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileSpreadsheet className="h-4 w-4 mr-2" />}
-        Excel
-      </Button>
-      <Button variant="outline" size="sm" className="rounded-xl" disabled={exporting !== null} onClick={() => onExport('pdf')}>
-        {exporting === 'pdf' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <FileText className="h-4 w-4 mr-2" />}
-        PDF
-      </Button>
     </div>
   );
 }

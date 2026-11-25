@@ -2,25 +2,23 @@
 
 import { useState, useEffect } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { fetchProductPrivate, withPrivate, splitPrivate, saveProductPrivate } from '@/lib/product-private';
 import { useTenant } from '@/hooks/useTenant';
+import Image from 'next/image';
 import { getEffectivePlan } from '@/lib/data';
-import { isProPlan } from '@/lib/plans';
+import { isProPlan, productLimit, PLAN_LABEL } from '@/lib/plans';
 import { TenantGate } from '@/components/compartido/TenantGate';
 import { motion, AnimatePresence } from 'framer-motion';
 import { formatCLP } from '@/lib/utils';
-import {
-  Package, Plus, Trash2, Edit3, Image as ImageIcon,
-  Search, ChevronLeft, MoreVertical, LayoutGrid, List as ListIcon,
-  AlertCircle, Save, Loader2, Store, Archive, ArchiveRestore, Settings2, X,
-  HelpCircle, Zap, ChefHat, Camera, ChevronDown, ExternalLink, Lightbulb
-} from 'lucide-react';
+import { Package, Plus, Edit3, ChevronLeft, Save, Loader2, Archive, ArchiveRestore, Camera, ChevronDown, ExternalLink, Lightbulb } from 'lucide-react';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ImageUploader } from '@/components/ui/image-uploader';
+import { mensajeParaPersona } from '@/lib/errores';
+import { ModifierGroupsEditor } from '@/components/menu-admin/ModifierGroupsEditor';
 
 export default function MenuManagementPage() {
   const { toast } = useToast();
@@ -44,12 +42,6 @@ export default function MenuManagementPage() {
   // Photo tips panel
   const [tipsOpen, setTipsOpen] = useState(false);
 
-  // Modifier groups (loaded when editing an existing product)
-  const [modifierGroups, setModifierGroups] = useState<any[]>([]);
-  const [newGroupName, setNewGroupName] = useState('');
-  const [newGroupType, setNewGroupType] = useState<'checkbox' | 'radio'>('checkbox');
-  const [newGroupRequired, setNewGroupRequired] = useState(false);
-  const [newOptionInputs, setNewOptionInputs] = useState<Record<string, { name: string; price: string }>>({});
 
   // Cost & restock fields (margin reports, restock estimates) are a Pro feature
   const canUseCosts = tenant ? isProPlan(getEffectivePlan(tenant)) : false;
@@ -64,53 +56,30 @@ export default function MenuManagementPage() {
       setTenant({ ...baseTenant });
       fetchProducts(baseTenant.id);
     }
+    // fetchProducts is a plain function declared below; it only depends on the id passed in
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseTenant]);
 
   async function fetchProducts(tenantId: string) {
     setProductsLoading(true);
     const supabase = createClient();
-    const { data } = await supabase
-      .from('products')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .order('category', { ascending: true });
-    setProducts(data || []);
+    const [{ data, error }, priv] = await Promise.all([
+      supabase
+        .from('products')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .order('category', { ascending: true }),
+      fetchProductPrivate(tenantId).catch(() => ({})),
+    ]);
+    if (error) {
+      toast({ title: 'No pudimos cargar tus productos', description: 'Revisa tu conexión y recarga la página.', variant: 'destructive' });
+    }
+    setProducts(withPrivate(data || [], priv));
     setProductsLoading(false);
   }
 
-  const handleUpdateTenant = async () => {
-    setSaving(true);
-    const supabase = createClient();
-    const { error: updateError } = await supabase
-      .from('tenants')
-      .update({
-        name: tenant.name,
-        description: tenant.description || null,
-        address: tenant.address || null,
-        phone: tenant.phone || null,
-        logo_url: tenant.logo_url || null,
-        transfer_bank: tenant.transfer_bank || null,
-        transfer_account_type: tenant.transfer_account_type || null,
-        transfer_account_number: tenant.transfer_account_number || null,
-        transfer_rut: tenant.transfer_rut || null,
-        transfer_email: tenant.transfer_email || null,
-      })
-      .eq('id', tenant.id);
 
-    if (updateError) {
-      toast({ title: 'Error', description: updateError.message, variant: 'destructive' });
-    } else {
-      toast({ title: '¡Actualizado!', description: 'Los datos del negocio se guardaron.' });
-    }
-    setSaving(false);
-  };
 
-const PRODUCT_LIMITS: Record<string, number> = {
-  gratis: 15,
-  starter: 100,
-  pro: 9999,
-  enterprise: 99999
-};
 
   const handleSaveProduct = async () => {
     if (!editProduct.name.trim()) return;
@@ -119,39 +88,50 @@ const PRODUCT_LIMITS: Record<string, number> = {
 
     if (isEditing === 'new') {
       const currentPlan = getEffectivePlan(tenant);
-      const maxProducts = PRODUCT_LIMITS[currentPlan] || 15;
+      const maxProducts = productLimit(currentPlan);
+      const activeProducts = products.filter(p => !p.is_archived).length;
 
-      if (products.length >= maxProducts) {
-        toast({ 
-          title: 'Límite de productos alcanzado 🛑', 
-          description: `Tu plan actual (${currentPlan.toUpperCase()}) permite un máximo de ${maxProducts} productos. Sube al siguiente plan para seguir creciendo.`, 
-          variant: 'destructive' 
+      if (maxProducts !== null && activeProducts >= maxProducts) {
+        toast({
+          title: 'Llegaste al límite de productos',
+          description: `Tu ${PLAN_LABEL[currentPlan as keyof typeof PLAN_LABEL] ?? 'plan'} permite hasta ${maxProducts} productos activos. Archiva alguno o sube de plan para agregar más.`,
+          variant: 'destructive',
         });
         setSaving(false);
         return;
       }
 
+      const { publicFields, privateFields } = splitPrivate(editProduct);
       const { data, error: insertError } = await supabase
         .from('products')
-        .insert({ ...editProduct, tenant_id: tenant.id })
+        .insert({ ...(publicFields as any), tenant_id: tenant.id })
         .select()
         .single();
 
       if (insertError) {
-        toast({ title: 'Error', description: insertError.message, variant: 'destructive' });
+        toast({ title: 'No se pudo crear el producto', description: 'Revisa los datos e inténtalo de nuevo.', variant: 'destructive' });
       } else {
-        setProducts([...products, data]);
+        if (privateFields.cost !== null || privateFields.restock_target !== null) {
+          await saveProductPrivate(tenant.id, data.id, privateFields).catch(() =>
+            toast({ title: 'El producto se creó, pero no su costo', description: 'Edítalo para volver a ingresarlo.', variant: 'destructive' }),
+          );
+        }
+        setProducts([...products, { ...data, ...privateFields }]);
         setIsEditing(null);
         toast({ title: '🍌 Producto creado', description: '¡Listo para vender!' });
       }
     } else {
+      const { publicFields, privateFields } = splitPrivate(editProduct);
       const { error: updateError } = await supabase
         .from('products')
-        .update(editProduct)
+        .update(publicFields as any)
         .eq('id', isEditing ?? '');
+      const privateError = !updateError && canUseCosts
+        ? await saveProductPrivate(tenant.id, isEditing ?? '', privateFields).then(() => null, (e: Error) => e)
+        : null;
 
-      if (updateError) {
-        toast({ title: 'Error', description: updateError.message, variant: 'destructive' });
+      if (updateError || privateError) {
+        toast({ title: 'No se pudieron guardar los cambios', description: 'Revisa tu conexión e inténtalo de nuevo.', variant: 'destructive' });
       } else {
         setProducts(products.map(p => p.id === isEditing ? { ...p, ...editProduct } : p));
         setIsEditing(null);
@@ -169,7 +149,7 @@ const PRODUCT_LIMITS: Record<string, number> = {
       .eq('id', id);
 
     if (updateError) {
-      toast({ title: 'Error', description: updateError.message, variant: 'destructive' });
+      toast({ title: 'No se pudo completar', description: mensajeParaPersona(updateError, 'menú'), variant: 'destructive' });
     } else {
       setProducts(products.map(p => p.id === id ? { ...p, is_archived: !currentlyArchived } : p));
       toast({ 
@@ -178,98 +158,6 @@ const PRODUCT_LIMITS: Record<string, number> = {
       });
     }
   };
-
-  async function loadModifierGroups(productId: string) {
-    const supabase = createClient();
-    const { data } = await supabase
-      .from('product_modifier_groups')
-      .select('*, product_modifier_options(*)')
-      .eq('product_id', productId)
-      .order('sort_order');
-    setModifierGroups(
-      (data || []).map((g: any) => ({
-        ...g,
-        product_modifier_options: (g.product_modifier_options || []).sort((a: any, b: any) => a.sort_order - b.sort_order),
-      }))
-    );
-  }
-
-  async function handleAddPreset(preset: { name: string; type: 'checkbox' | 'radio'; required: boolean; options: string[] }) {
-    if (!isEditing || isEditing === 'new') return;
-    const supabase = createClient();
-    const { data: group, error: gErr } = await supabase
-      .from('product_modifier_groups')
-      .insert({ product_id: isEditing, tenant_id: tenant.id, name: preset.name, type: preset.type, required: preset.required, sort_order: modifierGroups.length })
-      .select('*, product_modifier_options(*)')
-      .single();
-    if (gErr || !group) return;
-    const optionRows = preset.options.map((name, i) => ({ group_id: group.id, tenant_id: tenant.id, name, price_delta: 0, sort_order: i }));
-    const { data: opts } = await supabase.from('product_modifier_options').insert(optionRows).select();
-    setModifierGroups([...modifierGroups, { ...group, product_modifier_options: opts || [] }]);
-    toast({ title: `✅ Grupo "${preset.name}" creado`, description: 'Puedes editar o agregar más opciones.' });
-  }
-
-  async function handleAddGroup() {
-    if (!newGroupName.trim() || !isEditing || isEditing === 'new') return;
-    const supabase = createClient();
-    const { data, error: err } = await supabase
-      .from('product_modifier_groups')
-      .insert({
-        product_id: isEditing,
-        tenant_id: tenant.id,
-        name: newGroupName.trim(),
-        type: newGroupType,
-        required: newGroupRequired,
-        sort_order: modifierGroups.length,
-      })
-      .select('*, product_modifier_options(*)')
-      .single();
-    if (err || !data) { toast({ title: 'Error', description: err?.message, variant: 'destructive' }); return; }
-    setModifierGroups([...modifierGroups, { ...data, product_modifier_options: [] }]);
-    setNewGroupName('');
-    setNewGroupRequired(false);
-  }
-
-  async function handleDeleteGroup(groupId: string) {
-    const supabase = createClient();
-    await supabase.from('product_modifier_groups').delete().eq('id', groupId);
-    setModifierGroups(modifierGroups.filter(g => g.id !== groupId));
-  }
-
-  async function handleAddOption(groupId: string) {
-    const input = newOptionInputs[groupId];
-    if (!input?.name?.trim()) return;
-    const group = modifierGroups.find(g => g.id === groupId);
-    const supabase = createClient();
-    const { data, error: err } = await supabase
-      .from('product_modifier_options')
-      .insert({
-        group_id: groupId,
-        tenant_id: tenant.id,
-        name: input.name.trim(),
-        price_delta: Number(input.price) || 0,
-        sort_order: group?.product_modifier_options?.length || 0,
-      })
-      .select()
-      .single();
-    if (err) { toast({ title: 'Error', description: err.message, variant: 'destructive' }); return; }
-    setModifierGroups(modifierGroups.map(g =>
-      g.id === groupId
-        ? { ...g, product_modifier_options: [...(g.product_modifier_options || []), data] }
-        : g
-    ));
-    setNewOptionInputs(prev => ({ ...prev, [groupId]: { name: '', price: '' } }));
-  }
-
-  async function handleDeleteOption(groupId: string, optionId: string) {
-    const supabase = createClient();
-    await supabase.from('product_modifier_options').delete().eq('id', optionId);
-    setModifierGroups(modifierGroups.map(g =>
-      g.id === groupId
-        ? { ...g, product_modifier_options: (g.product_modifier_options || []).filter((o: any) => o.id !== optionId) }
-        : g
-    ));
-  }
 
   // Gate: show loading/error/unauthenticated states
   if (status !== 'found' || !tenant) {
@@ -311,7 +199,7 @@ const PRODUCT_LIMITS: Record<string, number> = {
                 <Camera className="h-4 w-4 text-primary" />
               </div>
               <span className="text-sm font-bold flex-1">Tips para fotos de productos</span>
-              <span className="text-[11px] text-muted-foreground mr-2 hidden sm:block">Tamaño · Formato · Calidad</span>
+              <span className="text-xs text-muted-foreground mr-2 hidden sm:block">Tamaño · Formato · Calidad</span>
               <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-300 ${tipsOpen ? 'rotate-180' : ''}`} />
             </button>
 
@@ -327,7 +215,7 @@ const PRODUCT_LIMITS: Record<string, number> = {
                   <div className="mt-2 px-4 py-5 rounded-2xl bg-card border border-border/60 grid grid-cols-1 sm:grid-cols-3 gap-4">
                     {/* Specs */}
                     <div className="space-y-3">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Especificaciones</p>
+                      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Especificaciones</p>
                       <div className="space-y-2 text-sm">
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Tamaño ideal</span>
@@ -343,14 +231,14 @@ const PRODUCT_LIMITS: Record<string, number> = {
                         </div>
                         <div className="flex justify-between">
                           <span className="text-muted-foreground">Peso tras comprimir</span>
-                          <span className="font-semibold text-green-500">~150–300 KB</span>
+                          <span className="font-semibold text-green-800">~150–300 KB</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Shoot tips */}
                     <div className="space-y-3">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Para mejores fotos</p>
+                      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Para mejores fotos</p>
                       <ul className="space-y-2 text-sm">
                         {[
                           'Usa luz natural lateral, no flash',
@@ -360,7 +248,7 @@ const PRODUCT_LIMITS: Record<string, number> = {
                           'Toma desde arriba (45° o cenital)',
                         ].map(tip => (
                           <li key={tip} className="flex items-start gap-2">
-                            <Lightbulb className="h-3.5 w-3.5 text-amber-400 mt-0.5 shrink-0" />
+                            <Lightbulb className="h-3.5 w-3.5 text-amber-800 mt-0.5 shrink-0" />
                             <span className="text-muted-foreground">{tip}</span>
                           </li>
                         ))}
@@ -369,7 +257,7 @@ const PRODUCT_LIMITS: Record<string, number> = {
 
                     {/* Links */}
                     <div className="space-y-3">
-                      <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Recursos gratuitos</p>
+                      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Recursos gratuitos</p>
                       <div className="space-y-2">
                         {[
                           { label: 'Guía de fotografía de comida', href: 'https://www.canva.com/learn/food-photography/' },
@@ -446,20 +334,18 @@ const PRODUCT_LIMITS: Record<string, number> = {
                     <Card className="rounded-3xl border-border/50 overflow-hidden hover:shadow-xl transition-all">
                       <div className="aspect-video bg-muted relative">
                         {product.image_url ? (
-                          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                          <Image src={product.image_url} alt={product.name} fill sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" className="object-cover" />
                         ) : (
                           <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
                             <Package className="h-10 w-10" />
                           </div>
                         )}
                         <div className="absolute top-3 right-3 flex gap-2">
-                          <Button variant="secondary" size="icon" className="rounded-full shadow-lg h-8 w-8"
+                          <Button variant="secondary" size="icon" className="rounded-full shadow-lg h-11 w-11"
+                            aria-label={`Editar ${product.name}`}
                             onClick={() => {
                               setIsEditing(product.id);
                               setEditProduct({ ...product });
-                              setModifierGroups([]);
-                              setNewGroupName('');
-                              loadModifierGroups(product.id);
                             }}>
                             <Edit3 className="h-3.5 w-3.5" />
                           </Button>
@@ -477,7 +363,7 @@ const PRODUCT_LIMITS: Record<string, number> = {
                         <div className="flex justify-between items-start">
                           <CardTitle className={`text-lg font-bold ${product.is_archived ? 'text-muted-foreground' : ''}`}>
                             {product.name}
-                            {product.is_archived && <span className="ml-2 text-[10px] bg-muted px-2 py-0.5 rounded-full uppercase tracking-widest">Archivado</span>}
+                            {product.is_archived && <span className="ml-2 text-xs bg-muted px-2 py-0.5 rounded-full uppercase tracking-widest">Archivado</span>}
                           </CardTitle>
                           <span className={`${product.is_archived ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary'} text-xs font-bold px-3 py-1.5 rounded-lg shrink-0`}>
                             {formatCLP(product.price || 0)}
@@ -488,7 +374,7 @@ const PRODUCT_LIMITS: Record<string, number> = {
                       <CardContent>
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground">{product.category}</span>
-                          <span className={`font-bold ${(product.stock ?? 0) < 10 ? 'text-destructive' : 'text-green-500'}`}>
+                          <span className={`font-bold ${(product.stock ?? 0) < 10 ? 'text-destructive' : 'text-green-800'}`}>
                             {product.stock ?? 0} en stock
                           </span>
                         </div>
@@ -515,7 +401,7 @@ const PRODUCT_LIMITS: Record<string, number> = {
               initial={{ opacity: 0, scale: 0.92, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.92, y: 20 }}
-              className="relative w-full max-w-xl bg-card border border-border rounded-[2.5rem] p-8 shadow-2xl max-h-[90vh] overflow-y-auto"
+              className="relative w-full max-w-xl bg-card border border-border rounded-panel p-8 shadow-2xl max-h-[90vh] overflow-y-auto"
             >
               <h2 className="font-brand text-3xl uppercase mb-6">
                 {isEditing === 'new' ? '🍌 Nuevo Producto' : '✍️ Editar Producto'}
@@ -625,205 +511,9 @@ const PRODUCT_LIMITS: Record<string, number> = {
                 </div>
               </div>
 
-              {/* ── Personalización del producto (Modificadores) ── */}
+              {/* ── Personalización del producto (opciones que elige el cliente) ── */}
               {isEditing && isEditing !== 'new' && (
-                <TooltipProvider>
-                <div className="mt-2 border-t border-border pt-5">
-
-                  {/* Header con tooltip */}
-                  <div className="flex items-center gap-2 mb-1">
-                    <ChefHat className="h-4 w-4 text-primary" />
-                    <h3 className="font-bold text-sm uppercase tracking-wider">Personalización del producto</h3>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button className="flex items-center justify-center w-5 h-5 rounded-full bg-muted hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors">
-                          <HelpCircle className="h-3.5 w-3.5" />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" className="max-w-xs p-4 text-sm leading-relaxed">
-                        <p className="font-bold mb-2">¿Para qué sirve esto?</p>
-                        <p className="text-muted-foreground mb-3">Permite que el cliente personalice su pedido. La cocina ve las elecciones en cada orden.</p>
-                        <p className="font-semibold text-xs uppercase tracking-wider mb-1">Ejemplos:</p>
-                        <ul className="text-muted-foreground space-y-1 text-xs">
-                          <li>🧴 <b>Salsas</b> — el cliente elige Mayonesa, Ketchup, Ají (puede marcar varios)</li>
-                          <li>🔥 <b>Punto de cocción</b> — elige solo uno: Jugoso, A punto o Bien cocido</li>
-                          <li>🥑 <b>Sin ingredientes</b> — marca lo que no quiere: Sin palta, Sin tomate</li>
-                          <li>🧀 <b>Extras con costo</b> — Queso extra (+$500), Tocino (+$800)</li>
-                        </ul>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                  <p className="text-xs text-muted-foreground mb-4">Salsas, extras, ingredientes a quitar — el cliente elige al pedir.</p>
-
-                  {/* Inicio rápido — solo si no hay grupos aún */}
-                  {modifierGroups.length === 0 && (
-                    <div className="rounded-2xl bg-primary/5 border border-primary/20 p-4 mb-4">
-                      <div className="flex items-center gap-1.5 mb-3">
-                        <Zap className="h-3.5 w-3.5 text-primary" />
-                        <span className="text-xs font-bold text-primary uppercase tracking-wider">Inicio rápido</span>
-                        <span className="text-xs text-muted-foreground">— Crea un grupo con un clic:</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {[
-                          { label: '🧴 Salsas', preset: { name: 'Salsas', type: 'checkbox' as const, required: false, options: ['Mayonesa', 'Ketchup', 'Ají', 'Mostaza'] } },
-                          { label: '🔥 Punto de cocción', preset: { name: 'Punto de cocción', type: 'radio' as const, required: true, options: ['Jugoso', 'A punto', 'Bien cocido'] } },
-                          { label: '🥑 Sin ingredientes', preset: { name: 'Sin ingredientes', type: 'checkbox' as const, required: false, options: ['Sin palta', 'Sin tomate', 'Sin cebolla', 'Sin lechuga'] } },
-                          { label: '🧀 Extras', preset: { name: 'Extras', type: 'checkbox' as const, required: false, options: ['Queso extra', 'Tocino', 'Huevo frito'] } },
-                        ].map(({ label, preset }) => (
-                          <button
-                            key={label}
-                            onClick={() => handleAddPreset(preset)}
-                            className="text-xs font-medium px-3 py-1.5 rounded-xl border border-primary/30 bg-background hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all duration-200"
-                          >
-                            {label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Grupos existentes */}
-                  <div className="space-y-3 mb-4">
-                    {modifierGroups.map((group: any) => (
-                      <div key={group.id} className="rounded-2xl border border-border bg-muted/20 p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-bold text-sm">{group.name}</span>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded-full uppercase font-bold cursor-help">
-                                  {group.type === 'radio' ? '☑ Una opción' : '☑ Múltiple'}
-                                </span>
-                              </TooltipTrigger>
-                              <TooltipContent side="top" className="text-xs max-w-[200px]">
-                                {group.type === 'radio'
-                                  ? 'El cliente elige solo una opción (ej: Punto de cocción)'
-                                  : 'El cliente puede marcar varias opciones (ej: Salsas)'}
-                              </TooltipContent>
-                            </Tooltip>
-                            {group.required && (
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="text-[10px] bg-amber-500/10 text-amber-600 px-2 py-0.5 rounded-full uppercase font-bold cursor-help">
-                                    ⚠ Requerido
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="text-xs max-w-[200px]">
-                                  El cliente debe elegir al menos una opción antes de agregar al carro.
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
-                          </div>
-                          <button onClick={() => handleDeleteGroup(group.id)} className="text-muted-foreground hover:text-destructive transition-colors shrink-0 ml-2">
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-
-                        {/* Opciones actuales */}
-                        {(group.product_modifier_options || []).length > 0 ? (
-                          <div className="flex flex-wrap gap-1.5 mb-3">
-                            {(group.product_modifier_options || []).map((opt: any) => (
-                              <span key={opt.id} className="flex items-center gap-1 bg-background border border-border/60 rounded-full px-2.5 py-1 text-xs font-medium">
-                                {opt.name}
-                                {opt.price_delta !== 0 && (
-                                  <span className="text-primary font-bold ml-0.5">
-                                    {opt.price_delta > 0 ? '+' : ''}{formatCLP(opt.price_delta)}
-                                  </span>
-                                )}
-                                <button onClick={() => handleDeleteOption(group.id, opt.id)} className="text-muted-foreground hover:text-destructive ml-0.5" aria-label="Eliminar opción">
-                                  <X className="h-2.5 w-2.5" />
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-muted-foreground mb-3 italic">Sin opciones aún — agrega la primera abajo.</p>
-                        )}
-
-                        {/* Agregar opción inline */}
-                        <div className="flex gap-2">
-                          <Input
-                            placeholder="Nombre de la opción (ej: Mayonesa)"
-                            className="h-8 text-xs rounded-xl"
-                            value={newOptionInputs[group.id]?.name || ''}
-                            onChange={e => setNewOptionInputs(prev => ({ ...prev, [group.id]: { ...prev[group.id], name: e.target.value } }))}
-                            onKeyDown={e => e.key === 'Enter' && handleAddOption(group.id)}
-                          />
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <Input
-                                placeholder="$0"
-                                type="number"
-                                className="h-8 text-xs rounded-xl w-20 text-center"
-                                value={newOptionInputs[group.id]?.price || ''}
-                                onChange={e => setNewOptionInputs(prev => ({ ...prev, [group.id]: { ...prev[group.id], price: e.target.value } }))}
-                                onKeyDown={e => e.key === 'Enter' && handleAddOption(group.id)}
-                              />
-                            </TooltipTrigger>
-                            <TooltipContent side="top" className="text-xs">
-                              Costo extra en pesos ($0 = gratis)
-                            </TooltipContent>
-                          </Tooltip>
-                          <Button size="sm" variant="outline" className="h-8 rounded-xl px-3 shrink-0" onClick={() => handleAddOption(group.id)}>
-                            <Plus className="h-3 w-3 mr-1" /> Agregar
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Crear nuevo grupo manual */}
-                  <div className="rounded-2xl border border-dashed border-border p-4 space-y-3">
-                    <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      {modifierGroups.length > 0 ? '+ Crear otro grupo' : 'O crea un grupo personalizado'}
-                    </p>
-                    <Input
-                      placeholder="Nombre del grupo (ej: Salsas, Punto de cocción, Extras…)"
-                      className="h-9 text-sm rounded-xl"
-                      value={newGroupName}
-                      onChange={e => setNewGroupName(e.target.value)}
-                    />
-                    <div className="flex gap-2 items-center flex-wrap">
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <select
-                            value={newGroupType}
-                            onChange={e => setNewGroupType(e.target.value as 'checkbox' | 'radio')}
-                            className="flex-1 min-w-[160px] h-9 bg-background border border-border rounded-xl px-3 text-sm cursor-pointer"
-                          >
-                            <option value="checkbox">☑ Elige varios (ej: Salsas)</option>
-                            <option value="radio">◉ Elige uno (ej: Punto de cocción)</option>
-                          </select>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs max-w-[220px]">
-                          <b>Elige varios:</b> el cliente puede marcar más de una opción.<br />
-                          <b>Elige uno:</b> el cliente debe elegir exactamente una.
-                        </TooltipContent>
-                      </Tooltip>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <label className="flex items-center gap-1.5 text-xs font-medium cursor-pointer whitespace-nowrap">
-                            <input
-                              type="checkbox"
-                              checked={newGroupRequired}
-                              onChange={e => setNewGroupRequired(e.target.checked)}
-                              className="rounded"
-                            />
-                            Obligatorio
-                          </label>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="text-xs max-w-[200px]">
-                          Si está marcado, el cliente no podrá agregar al carro sin elegir esta opción.
-                        </TooltipContent>
-                      </Tooltip>
-                      <Button size="sm" className="h-9 rounded-xl gap-1.5" onClick={handleAddGroup} disabled={!newGroupName.trim()}>
-                        <Plus className="h-3.5 w-3.5" /> Crear grupo
-                      </Button>
-                    </div>
-                  </div>
-
-                </div>
-                </TooltipProvider>
+                <ModifierGroupsEditor key={isEditing} tenantId={tenant.id} productId={isEditing} />
               )}
 
               <div className="flex gap-3 mt-4">
@@ -854,12 +544,12 @@ const PRODUCT_LIMITS: Record<string, number> = {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.92, y: 16 }}
               transition={{ type: 'spring', stiffness: 380, damping: 30 }}
-              className="relative w-full max-w-sm bg-card border border-border rounded-[2rem] shadow-2xl p-8 flex flex-col items-center text-center gap-5"
+              className="relative w-full max-w-sm bg-card border border-border rounded-panel shadow-2xl p-8 flex flex-col items-center text-center gap-5"
             >
               <div className={`p-4 rounded-3xl ${confirmArchive.currentlyArchived ? 'bg-green-500/10' : 'bg-amber-500/10'}`}>
                 {confirmArchive.currentlyArchived
-                  ? <ArchiveRestore className="h-8 w-8 text-green-500" />
-                  : <Archive className="h-8 w-8 text-amber-500" />
+                  ? <ArchiveRestore className="h-8 w-8 text-green-800" />
+                  : <Archive className="h-8 w-8 text-amber-800" />
                 }
               </div>
               <div>
@@ -868,8 +558,8 @@ const PRODUCT_LIMITS: Record<string, number> = {
                 </h3>
                 <p className="text-muted-foreground text-sm">
                   {confirmArchive.currentlyArchived
-                    ? <>¿Quieres volver a mostrar <span className="text-foreground font-semibold">"{confirmArchive.name}"</span> en el menú?</>
-                    : <>¿Quieres ocultar <span className="text-foreground font-semibold">"{confirmArchive.name}"</span> del menú? Podrás reactivarlo cuando quieras.</>
+                    ? <>¿Quieres volver a mostrar <span className="text-foreground font-semibold">“{confirmArchive.name}”</span> en el menú?</>
+                    : <>¿Quieres ocultar <span className="text-foreground font-semibold">“{confirmArchive.name}”</span> del menú? Podrás reactivarlo cuando quieras.</>
                   }
                 </p>
               </div>
@@ -898,6 +588,7 @@ const PRODUCT_LIMITS: Record<string, number> = {
           </div>
         )}
       </AnimatePresence>
+
     </div>
   );
 }

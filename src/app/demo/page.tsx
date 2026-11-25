@@ -35,7 +35,7 @@ export default function DemoPage() {
                 <span className="relative z-10 font-brand text-base sm:text-lg tracking-wider" style={{ lineHeight: 1 }}>APE</span>
               </div>
             </Link>
-            <span className="hidden sm:inline-flex items-center gap-1.5 bg-primary/10 text-primary border border-primary/20 text-[10px] font-bold uppercase tracking-widest px-2.5 py-1 rounded-full shrink-0">
+            <span className="hidden sm:inline-flex items-center gap-1.5 bg-primary/10 text-primary border border-primary/20 text-xs font-bold uppercase tracking-widest px-2.5 py-1 rounded-full shrink-0">
               <Zap className="h-3 w-3" /> Demo Interactiva
             </span>
           </div>
@@ -142,13 +142,13 @@ export default function DemoPage() {
 
             {/* Phone shell */}
             <div className="relative mx-auto lg:mx-0" style={{ maxWidth: '390px' }}>
-              <div className="relative bg-zinc-900 rounded-[3rem] p-3 shadow-2xl border-4 border-zinc-800 ring-1 ring-white/5">
+              <div className="relative bg-zinc-900 rounded-panel p-3 shadow-2xl border-4 border-zinc-800 ring-1 ring-white/5">
                 {/* Notch */}
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 w-28 h-7 bg-zinc-900 rounded-b-2xl z-10 flex items-center justify-center">
                   <div className="w-12 h-1.5 bg-zinc-800 rounded-full" />
                 </div>
                 {/* Screen — iframe siempre montado para mantener el estado de navegación */}
-                <div className="relative overflow-hidden rounded-[2.3rem] bg-background" style={{ height: 'min(950px, calc(100svh - 140px))' }}>
+                <div className="relative overflow-hidden rounded-panel bg-background" style={{ height: 'min(950px, calc(100svh - 140px))' }}>
                   <iframe
                     src={`/m/${DEMO_SLUG}`}
                     className="w-full h-full border-0"
@@ -182,7 +182,7 @@ export default function DemoPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <ChefHat className="h-4 w-4 text-primary shrink-0" />
                   <p className="text-sm font-bold">Vista de Cocina</p>
-                  <span className="flex items-center gap-1 text-[10px] font-bold text-green-500">
+                  <span className="flex items-center gap-1 text-xs font-bold text-green-500">
                     <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" /> En vivo
                   </span>
                 </div>
@@ -191,7 +191,7 @@ export default function DemoPage() {
             </div>
 
             {/* Flow visual */}
-            <div className="mb-4 flex items-center gap-1 overflow-x-auto pb-2 scrollbar-none text-[11px] font-bold text-muted-foreground">
+            <div className="mb-4 flex items-center gap-1 overflow-x-auto pb-2 scrollbar-none text-xs font-bold text-muted-foreground">
               {['Por Pagar', '→', 'Pendiente', '→', 'En preparación', '→', 'Listo', '→', 'Entregado'].map((s, i) => (
                 <span key={i} className={s === '→' ? 'text-border px-1 shrink-0 opacity-50' : 'bg-muted px-2.5 py-1 rounded-full whitespace-nowrap shrink-0'}>
                   {s}

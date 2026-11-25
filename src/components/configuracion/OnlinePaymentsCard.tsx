@@ -62,14 +62,14 @@ export function OnlinePaymentsCard() {
 
   if (!status) {
     return (
-      <Card className="rounded-[2.5rem] border-transparent shadow-xl bg-card">
+      <Card className="rounded-panel border-transparent shadow-xl bg-card">
         <CardContent className="p-8 flex justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></CardContent>
       </Card>
     );
   }
 
   return (
-    <Card className="rounded-[2.5rem] border-transparent shadow-xl bg-card overflow-hidden">
+    <Card className="rounded-panel border-transparent shadow-xl bg-card overflow-hidden">
       <CardHeader className="bg-muted/50 p-8 border-b border-border">
         <div className="flex items-center gap-3">
           <Globe className="h-5 w-5 text-primary" />

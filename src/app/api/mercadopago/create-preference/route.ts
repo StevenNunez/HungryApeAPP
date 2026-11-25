@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Preference, PreApproval } from 'mercadopago';
 import { mercadoPagoClient, SUBSCRIPTION_PLANS, PlanId } from '@/lib/mercadopago';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { anotarError } from '@/lib/errores-servidor';
 
 export async function POST(request: NextRequest) {
   try {
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ preapprovalId: result.id, checkoutUrl });
   } catch (error: any) {
-    console.error('MP create-preference error:', error?.cause ?? error);
+    await anotarError({ origen: 'servidor', donde: 'api/mercadopago/create-preference', error: error?.cause ?? error });
     return NextResponse.json(
       { error: `Error al generar el pago: ${error.message}` },
       { status: 500 },

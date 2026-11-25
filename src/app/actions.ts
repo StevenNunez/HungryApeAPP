@@ -1,24 +1,24 @@
 'use server';
 
 import { headers } from 'next/headers';
-import { suggestUserNickname, type SuggestUserNicknameInput } from '@/ai/flows/suggest-user-nickname';
-import { rateLimit } from '@/lib/rate-limit';
+import { suggestNickname } from '@/lib/nickname';
+import { rateLimit, clientIp } from '@/lib/rate-limit';
+import { anotarError } from '@/lib/errores-servidor';
 
-export async function getSuggestedNicknameAction(input: SuggestUserNicknameInput): Promise<string> {
+export async function getSuggestedNicknameAction(input: { foodPreferences: string }): Promise<{ nickname: string } | { error: string }> {
   // Public action backed by a paid AI quota: cap per IP and bound the input size.
   const h = await headers();
-  const ip = h.get('x-forwarded-for')?.split(',')[0]?.trim() || h.get('x-real-ip') || 'unknown';
-  if (!rateLimit(`nickname:${ip}`, 8, 10 * 60 * 1000)) {
-    return 'Error :(';
+  if (!rateLimit(`nickname:${clientIp(h)}`, 8, 10 * 60 * 1000)) {
+    return { error: 'Pediste varias sugerencias seguidas. Espera unos minutos o escribe tu apodo.' };
   }
 
-  const foodPreferences = String(input?.foodPreferences ?? '').slice(0, 100);
+  const foodPreferences = String(input?.foodPreferences ?? '').slice(0, 100).trim();
+  if (!foodPreferences) return { error: 'Cuéntanos qué te gusta comer.' };
 
   try {
-    const result = await suggestUserNickname({ foodPreferences });
-    return result.nickname;
+    return { nickname: await suggestNickname(foodPreferences, AbortSignal.timeout(8000)) };
   } catch (error) {
-    console.error('Error suggesting nickname:', error);
-    return 'Error al sugerir';
+    await anotarError({ origen: 'servidor', donde: 'action sugerir apodo', error });
+    return { error: 'No pudimos pensar un apodo ahora. Escribe el tuyo 🙂' };
   }
 }

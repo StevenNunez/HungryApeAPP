@@ -1,3 +1,4 @@
+import tailwindcssAnimate from 'tailwindcss-animate';
 import type {Config} from 'tailwindcss';
 
 export default {
@@ -11,11 +12,11 @@ export default {
     extend: {
       letterSpacing: { wordmark: '-0.05em' },
       fontFamily: {
-        body: ['Poppins', 'sans-serif'],
-        headline: ['Luckiest Guy', 'cursive'],
-        brand: ['Luckiest Guy', 'cursive'],
+        body: ['var(--font-poppins)', 'Poppins', 'sans-serif'],
+        headline: ['var(--font-luckiest)', 'Luckiest Guy', 'cursive'],
+        brand: ['var(--font-luckiest)', 'Luckiest Guy', 'cursive'],
         // El nombre "Teo Labs" (Lexend Bold). Usar siempre con `tracking-wordmark`.
-        wordmark: ['Lexend', 'Poppins', 'sans-serif'],
+        wordmark: ['var(--font-lexend)', 'Lexend', 'var(--font-poppins)', 'sans-serif'],
         code: ['monospace'],
       },
       colors: {
@@ -71,6 +72,8 @@ export default {
         },
       },
       borderRadius: {
+        // Large panels/cards of the dashboard and landing (one value instead of 2rem/2.3rem/2.5rem/3rem)
+        panel: '2rem',
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',
         sm: 'calc(var(--radius) - 4px)',
@@ -99,5 +102,5 @@ export default {
       },
     },
   },
-  plugins: [require('tailwindcss-animate')],
+  plugins: [tailwindcssAnimate],
 } satisfies Config;

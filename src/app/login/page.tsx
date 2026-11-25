@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { TeoLabsCredit } from '@/components/compartido/TeoLabsCredit';
 import { Eye, EyeOff, Loader2, ArrowLeft, Mail, CheckCircle } from 'lucide-react';
+import { mensajeParaPersona } from '@/lib/errores';
 
 // ─── Google icon ──────────────────────────────────────────────────────────────
 function GoogleIcon() {
@@ -35,6 +36,11 @@ function LoginForm() {
   const [email, setEmail] = useState(searchParams.get('email') || '');
   const [password, setPassword] = useState('');
   const [businessName, setBusinessName] = useState(searchParams.get('business') || '');
+  // Where to go after signing in. Only same-site paths ("//evil.com" would leave the site).
+  const nextParam = searchParams.get('next') || '';
+  const next = nextParam.startsWith('/') && !nextParam.startsWith('//') ? nextParam : '/dashboard';
+  // Someone invited to join a business signs up as a person, not as a new food truck
+  const joiningTeam = next.startsWith('/invitacion/');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -61,9 +67,9 @@ function LoginForm() {
   useEffect(() => {
     const supabase = createClient();
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) router.replace('/dashboard');
+      if (session) router.replace(next);
     });
-  }, [router]);
+  }, [router, next]);
 
   // ── Google OAuth ────────────────────────────────────────────────────────────
   const handleGoogleLogin = async () => {
@@ -72,7 +78,7 @@ function LoginForm() {
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
       },
     });
     // Page navigates away; no setGoogleLoading(false) needed
@@ -89,7 +95,7 @@ function LoginForm() {
     });
     setLoading(false);
     if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'No se pudo completar', description: mensajeParaPersona(error, 'login'), variant: 'destructive' });
       return;
     }
     setForgotSent(true);
@@ -103,13 +109,13 @@ function LoginForm() {
 
     try {
       if (mode === 'signup') {
-        const callbackUrl = `${window.location.origin}/auth/callback?next=/dashboard`;
+        const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`;
 
         const { data: authData, error: authError } = await supabase.auth.signUp({
           email,
           password,
           options: {
-            data: { business_name: businessName },
+            data: joiningTeam ? {} : { business_name: businessName },
             emailRedirectTo: callbackUrl,
           },
         });
@@ -130,8 +136,8 @@ function LoginForm() {
           return;
         }
 
-        // Session active — create the tenant
-        if (authData.user) {
+        // Session active — create the tenant (not for someone joining a team: the invitation does it)
+        if (authData.user && !joiningTeam) {
           const slug = businessName
             .toLowerCase()
             .replace(/[^a-z0-9\s-]/g, '')
@@ -153,6 +159,11 @@ function LoginForm() {
           }
         }
 
+        if (joiningTeam) {
+          router.push(next);
+          return;
+        }
+
         // Fire welcome email (non-blocking)
         fetch('/api/email/welcome', {
           method: 'POST',
@@ -161,7 +172,7 @@ function LoginForm() {
         }).catch(() => {});
 
         toast({ title: '🦍 ¡Bienvenido a Hungry Ape!', description: 'Tu food truck digital está listo.' });
-        router.push('/dashboard');
+        router.push(next);
 
       } else {
         // Login
@@ -175,10 +186,10 @@ function LoginForm() {
           }
           throw error;
         }
-        router.push('/dashboard');
+        router.push(next);
       }
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message || 'Algo salió mal.', variant: 'destructive' });
+      toast({ title: 'No se pudo completar', description: mensajeParaPersona(err, 'login'), variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -241,7 +252,9 @@ function LoginForm() {
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
             {mode === 'login' && 'Ingresa a tu dashboard para administrar tu negocio.'}
-            {mode === 'signup' && 'Registra tu food truck y empieza a recibir pedidos hoy.'}
+            {mode === 'signup' && (joiningTeam
+              ? 'Crea tu cuenta para unirte al equipo del local que te invitó.'
+              : 'Registra tu food truck y empieza a recibir pedidos hoy.')}
             {mode === 'forgot' && 'Te enviaremos un enlace para restablecer tu contraseña.'}
           </p>
         </CardHeader>
@@ -250,7 +263,7 @@ function LoginForm() {
           {/* Email + password form */}
           <form onSubmit={mode === 'forgot' ? handleForgot : handleSubmit} className="space-y-4">
             {/* Business name — signup only */}
-            {mode === 'signup' && (
+            {mode === 'signup' && !joiningTeam && (
               <div>
                 <label htmlFor="businessName" className="text-sm font-medium mb-1.5 block">
                   Nombre de tu Food Truck
@@ -330,7 +343,7 @@ function LoginForm() {
             >
               {loading && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               {mode === 'login' && 'Entrar'}
-              {mode === 'signup' && 'Crear mi Food Truck'}
+              {mode === 'signup' && (joiningTeam ? 'Crear mi cuenta' : 'Crear mi Food Truck')}
               {mode === 'forgot' && (
                 <>
                   <Mail className="h-4 w-4 mr-2" />

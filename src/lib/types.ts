@@ -49,7 +49,7 @@ export interface CartItem extends MenuItem {
   modifierPrice: number;
 }
 
-export type OrderStatus = 'Por Pagar' | 'Pendiente' | 'En preparación' | 'Listo' | 'Entregado';
+export type OrderStatus = 'Por Pagar' | 'Pendiente' | 'En preparación' | 'Listo' | 'Entregado' | 'Cancelado';
 export type PaymentMethod = 'cash' | 'transfer' | 'card' | 'qr' | 'online';
 export type OrderType = 'aqui' | 'llevar';
 

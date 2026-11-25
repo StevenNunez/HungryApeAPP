@@ -172,10 +172,6 @@ export interface Database {
           ai_hint: string;
           created_at: string;
           is_archived: boolean;
-          /** Unit cost (CLP). Pro: margin & restock estimates. */
-          cost: number | null;
-          /** Stock level to restock up to (Pro restock alerts). */
-          restock_target: number | null;
         };
         Insert: {
           id?: string;
@@ -190,8 +186,6 @@ export interface Database {
           ai_hint?: string;
           created_at?: string;
           is_archived?: boolean;
-          cost?: number | null;
-          restock_target?: number | null;
         };
         Update: {
           id?: string;
@@ -205,8 +199,100 @@ export interface Database {
           stock?: number;
           ai_hint?: string;
           is_archived?: boolean;
+        };
+        Relationships: never[];
+      };
+      /** Team of a business (migration 019). One account belongs to one business. */
+      tenant_members: {
+        Row: {
+          tenant_id: string;
+          user_id: string;
+          role: 'dueno' | 'encargado' | 'cocina';
+          created_at: string;
+        };
+        Insert: {
+          tenant_id: string;
+          user_id: string;
+          role: 'dueno' | 'encargado' | 'cocina';
+          created_at?: string;
+        };
+        Update: {
+          role?: 'dueno' | 'encargado' | 'cocina';
+        };
+        Relationships: never[];
+      };
+      /** Pending team invitations (server only: RLS without policies). Only the token hash is stored. */
+      tenant_invitations: {
+        Row: {
+          id: string;
+          tenant_id: string;
+          email: string;
+          role: 'encargado' | 'cocina';
+          token_hash: string;
+          invited_by: string | null;
+          created_at: string;
+          expires_at: string;
+          accepted_at: string | null;
+          accepted_by: string | null;
+          revoked_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          tenant_id: string;
+          email: string;
+          role: 'encargado' | 'cocina';
+          token_hash: string;
+          invited_by?: string | null;
+          expires_at?: string;
+        };
+        Update: {
+          accepted_at?: string | null;
+          accepted_by?: string | null;
+          revoked_at?: string | null;
+        };
+        Relationships: never[];
+      };
+      /** Error registry (migration 018), grouped by fingerprint. Server only. */
+      errores: {
+        Row: {
+          huella: string;
+          origen: 'navegador' | 'servidor';
+          donde: string;
+          mensaje: string;
+          detalle: Json;
+          usuario_id: string | null;
+          tenant_id: string | null;
+          veces: number;
+          primera_vez: string;
+          ultima_vez: string;
+          resuelto: boolean;
+        };
+        Insert: never;
+        Update: { resuelto?: boolean };
+        Relationships: never[];
+      };
+      /** Owner-only product data (cost, restock target). Never readable by customers. */
+      product_private: {
+        Row: {
+          product_id: string;
+          tenant_id: string;
+          /** Unit cost (CLP). Pro: margin & restock estimates. */
+          cost: number | null;
+          /** Stock level to restock up to (Pro restock alerts). */
+          restock_target: number | null;
+          updated_at: string;
+        };
+        Insert: {
+          product_id: string;
+          tenant_id: string;
           cost?: number | null;
           restock_target?: number | null;
+          updated_at?: string;
+        };
+        Update: {
+          cost?: number | null;
+          restock_target?: number | null;
+          updated_at?: string;
         };
         Relationships: never[];
       };
@@ -229,6 +315,8 @@ export interface Database {
           delivered_at: string | null;
           paid_online: boolean;
           online_payment_id: string | null;
+          cancelled_at: string | null;
+          cancel_reason: string | null;
         };
         Insert: {
           id?: string;
@@ -376,6 +464,19 @@ export interface Database {
       };
     };
     Functions: {
+      /** Businesses of the signed-in user, optionally limited to some roles (migration 019). */
+      member_tenants: {
+        Args: { p_roles?: string[] | null };
+        Returns: string[];
+      };
+      /** Service role only. Registers an error; true when it is new (or came back after being resolved). */
+      registrar_error: {
+        Args: {
+          p_huella: string; p_origen: string; p_donde: string; p_mensaje: string;
+          p_detalle: Json; p_usuario_id: string | null; p_tenant_id: string | null;
+        };
+        Returns: boolean;
+      };
       /** Creates an order server-side (prices, total, stock and plan limits come from the DB). */
       create_order: {
         Args: {
@@ -391,6 +492,21 @@ export interface Database {
       get_order_public: {
         Args: { p_order_id: string };
         Returns: Json;
+      };
+      /** Cancels this tenant's "Por Pagar" orders older than 60 min and returns their stock. */
+      expire_unpaid_orders_for: {
+        Args: { p_tenant_id: string };
+        Returns: number;
+      };
+      /** Service role only. Cancels one order (from Por Pagar / Pendiente) and returns its stock. */
+      cancel_order: {
+        Args: { p_order_id: string; p_reason?: string };
+        Returns: boolean;
+      };
+      /** Service role only. Same as expire_unpaid_orders_for, for every tenant. */
+      expire_unpaid_orders: {
+        Args: { p_tenant_id?: string };
+        Returns: number;
       };
     };
     Enums: Record<string, never>;

@@ -14,9 +14,13 @@ import { formatCLP } from '@/lib/utils';
 interface MenuItemProps {
   item: MenuItemType;
   groups?: ModifierGroup[];
+  /** First photo on screen: load it eagerly (it's the largest paint of the menu). */
+  priority?: boolean;
+  /** False when the business isn't taking app orders (no active plan). */
+  ordersOpen?: boolean;
 }
 
-export function MenuItem({ item, groups = [] }: MenuItemProps) {
+export function MenuItem({ item, groups = [], priority = false, ordersOpen = true }: MenuItemProps) {
   const { addToCart, cartItems } = useCart();
   const { toast } = useToast();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -103,7 +107,7 @@ export function MenuItem({ item, groups = [] }: MenuItemProps) {
           {imgError ? (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-muted gap-1">
               <span className="text-4xl">🍔</span>
-              <span className="text-[10px] text-muted-foreground font-medium">{item.name}</span>
+              <span className="text-xs text-muted-foreground font-medium">{item.name}</span>
             </div>
           ) : (
             <Image
@@ -111,6 +115,7 @@ export function MenuItem({ item, groups = [] }: MenuItemProps) {
               alt={item.name}
               fill
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              priority={priority}
               className="object-cover group-hover:scale-105 transition-transform duration-500"
               data-ai-hint={item.aiHint}
               onError={() => setImgError(true)}
@@ -127,7 +132,7 @@ export function MenuItem({ item, groups = [] }: MenuItemProps) {
             {formatCLP(item.price)}
           </span>
           {item.isAvailable && item.stock > 0 && item.stock <= 5 && (
-            <span className="absolute top-3 left-3 bg-amber-500 text-white text-xs font-bold px-2 py-0.5 rounded-full shadow">
+            <span className="absolute top-3 left-3 bg-amber-400 text-black text-xs font-bold px-2 py-0.5 rounded-full shadow">
               ¡Quedan {item.stock}!
             </span>
           )}
@@ -145,7 +150,7 @@ export function MenuItem({ item, groups = [] }: MenuItemProps) {
                 {groups.map(g => (
                   <span
                     key={g.id}
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold bg-primary/8 text-primary border border-primary/20 px-2 py-0.5 rounded-full"
+                    className="inline-flex items-center gap-1 text-xs font-semibold bg-primary/8 text-primary border border-primary/20 px-2 py-0.5 rounded-full"
                   >
                     <Sliders className="h-2.5 w-2.5" />
                     {g.name}
@@ -158,7 +163,7 @@ export function MenuItem({ item, groups = [] }: MenuItemProps) {
           <Button
             id={`add-to-cart-${item.id}`}
             onClick={handleAddClick}
-            disabled={!item.isAvailable || item.stock <= 0 || isStockReached}
+            disabled={!ordersOpen || !item.isAvailable || item.stock <= 0 || isStockReached}
             className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold gap-2 rounded-xl transition-all active:scale-95"
             aria-label={`Agregar ${item.name} al carrito`}
           >
@@ -167,7 +172,7 @@ export function MenuItem({ item, groups = [] }: MenuItemProps) {
               : <PlusCircle className="h-4 w-4 shrink-0" />
             }
             <span className="truncate">
-              {isStockReached ? 'Límite alcanzado' : groups.length > 0 ? 'Elegir opciones' : 'Agregar al pedido'}
+              {!ordersOpen ? 'Pide en caja' : isStockReached ? 'No quedan más unidades' : groups.length > 0 ? 'Elegir opciones' : 'Agregar al pedido'}
             </span>
           </Button>
         </div>
@@ -205,12 +210,12 @@ export function MenuItem({ item, groups = [] }: MenuItemProps) {
               <div key={group.id}>
                 <div className="flex items-center justify-between mb-2.5">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold">{group.name}</span>
-                    <span className="text-[10px] text-muted-foreground">
+                    <span id={`group-${group.id}`} className="text-sm font-bold">{group.name}</span>
+                    <span className="text-xs text-muted-foreground">
                       {group.type === 'radio' ? '(elige 1)' : '(puedes elegir varios)'}
                     </span>
                   </div>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full uppercase ${
                     group.required
                       ? 'bg-destructive/10 text-destructive border border-destructive/20'
                       : 'bg-muted text-muted-foreground'
@@ -218,12 +223,20 @@ export function MenuItem({ item, groups = [] }: MenuItemProps) {
                     {group.required ? 'Requerido' : 'Opcional'}
                   </span>
                 </div>
-                <div className="space-y-1.5">
+                <div
+                  className="space-y-1.5"
+                  role={group.type === 'radio' ? 'radiogroup' : 'group'}
+                  aria-labelledby={`group-${group.id}`}
+                  aria-required={group.required || undefined}
+                >
                   {group.options.map(option => {
                     const isSelected = (selections[group.id] || []).includes(option.id);
                     return (
                       <button
                         key={option.id}
+                        type="button"
+                        role={group.type === 'radio' ? 'radio' : 'checkbox'}
+                        aria-checked={isSelected}
                         onClick={() => toggleOption(group.id, option.id, group.type)}
                         className={`w-full flex items-center justify-between rounded-xl px-4 py-3 border-2 transition-all text-sm ${
                           isSelected
@@ -242,7 +255,7 @@ export function MenuItem({ item, groups = [] }: MenuItemProps) {
                           <span className="font-medium text-left">{option.name}</span>
                         </div>
                         {option.priceDelta !== 0 && (
-                          <span className={`text-xs font-bold shrink-0 ml-2 ${option.priceDelta > 0 ? 'text-primary' : 'text-green-500'}`}>
+                          <span className={`text-xs font-bold shrink-0 ml-2 ${option.priceDelta > 0 ? 'text-primary' : 'text-green-800'}`}>
                             {option.priceDelta > 0 ? '+' : ''}{formatCLP(option.priceDelta)}
                           </span>
                         )}

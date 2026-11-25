@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Store, Package, ArrowRight, CheckCircle } from 'lucide-react';
+import { mensajeParaPersona } from '@/lib/errores';
+import { useTenant } from '@/hooks/useTenant';
+import { Logo } from '@/components/compartido/Logo';
 
 type Step = 'name' | 'product' | 'done';
 
@@ -13,6 +16,8 @@ const CATEGORIES = ['Hamburguesas', 'Hot Dogs', 'Tacos', 'Pizzas', 'Bebidas', 'A
 export default function SetupPage() {
   const router = useRouter();
   const { toast } = useToast();
+  // The panel layout loaded "no business"; once it's created, the panel must reload it
+  const { refetch: refetchTenant } = useTenant();
   const [step, setStep] = useState<Step>('name');
   const [loading, setLoading] = useState(false);
 
@@ -47,9 +52,13 @@ export default function SetupPage() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { router.replace('/login'); return; }
 
+    // "Ñandú Café" → "nandu-cafe-x1y2" (accents converted, not dropped)
     const slug = businessName
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
       .replace(/[^a-z0-9\s-]/g, '')
+      .trim()
       .replace(/\s+/g, '-')
       .slice(0, 30) + '-' + Math.random().toString(36).slice(2, 6);
 
@@ -64,12 +73,19 @@ export default function SetupPage() {
     }).select('id').single();
 
     if (error) {
-      toast({ title: 'Error al crear negocio', description: error.message, variant: 'destructive' });
+      // 23505 = unique violation: this account already has a business (e.g. a double tap)
+      if (error.code === '23505') {
+        refetchTenant();
+        router.replace('/dashboard');
+        return;
+      }
+      toast({ title: 'No pudimos crear tu negocio', description: 'Revisa tu conexión e inténtalo de nuevo.', variant: 'destructive' });
       setLoading(false);
       return;
     }
 
     setTenantId(tenant.id);
+    refetchTenant();
 
     // Fire welcome email (non-blocking)
     supabase.auth.getUser().then(({ data: { user: u } }) => {
@@ -110,7 +126,7 @@ export default function SetupPage() {
     });
 
     if (error) {
-      toast({ title: 'Error al agregar producto', description: error.message, variant: 'destructive' });
+      toast({ title: 'Error al agregar producto', description: mensajeParaPersona(error, 'alta de negocio'), variant: 'destructive' });
       setLoading(false);
       return;
     }
@@ -141,12 +157,7 @@ export default function SetupPage() {
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="relative inline-flex items-baseline mb-2">
-            <span aria-hidden="true" className="absolute inset-0 -inset-x-4 rounded-[40%_60%_55%_45%/50%_40%_60%_50%] bg-accent/90 -z-0" style={{ transform: 'rotate(-1.5deg) skewX(-2deg)' }} />
-            <span className="relative z-10 font-brand text-2xl tracking-wider text-foreground" style={{ lineHeight: 1 }}>HUNGRY</span>
-            <span className="relative z-10 text-xl mx-1" style={{ lineHeight: 1 }}>🍌</span>
-            <span className="relative z-10 font-brand text-2xl tracking-wider text-foreground" style={{ lineHeight: 1 }}>APE</span>
-          </div>
+          <div className="inline-flex justify-center mb-2"><Logo size="lg" tagline={false} /></div>
         </div>
 
         {/* Step progress — hide on done */}
@@ -161,7 +172,7 @@ export default function SetupPage() {
                 <div key={s.id} className="flex items-center gap-3">
                   <div className={`flex flex-col items-center gap-1`}>
                     <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-                      isDone ? 'bg-green-500/20 text-green-500 border border-green-500/40' :
+                      isDone ? 'bg-green-500/20 text-green-800 border border-green-500/40' :
                       isActive ? 'bg-primary/20 text-primary border border-primary/40' :
                       'bg-muted text-muted-foreground border border-border'
                     }`}>
@@ -182,7 +193,7 @@ export default function SetupPage() {
 
         {/* ── Step 1: Business name ──────────────────────────────────────── */}
         {step === 'name' && (
-          <div className="bg-card border border-border rounded-[2.5rem] p-8 shadow-2xl">
+          <div className="bg-card border border-border rounded-panel p-8 shadow-2xl">
             <div className="text-center mb-6">
               <div className="inline-flex p-4 bg-primary/10 rounded-3xl mb-3">
                 <Store className="h-10 w-10 text-primary" />
@@ -193,10 +204,11 @@ export default function SetupPage() {
 
             <form onSubmit={handleCreateTenant} className="space-y-4">
               <div>
-                <label className="text-sm font-bold uppercase tracking-tighter pl-1 block mb-2">
+                <label htmlFor="setup-business-name" className="text-sm font-bold uppercase tracking-tighter pl-1 block mb-2">
                   Nombre del local
                 </label>
                 <input
+                  id="setup-business-name"
                   type="text"
                   required
                   autoFocus
@@ -221,10 +233,10 @@ export default function SetupPage() {
 
         {/* ── Step 2: First product ──────────────────────────────────────── */}
         {step === 'product' && (
-          <div className="bg-card border border-border rounded-[2.5rem] p-8 shadow-2xl">
+          <div className="bg-card border border-border rounded-panel p-8 shadow-2xl">
             <div className="text-center mb-6">
               <div className="inline-flex p-4 bg-green-500/10 rounded-3xl mb-3">
-                <Package className="h-10 w-10 text-green-500" />
+                <Package className="h-10 w-10 text-green-800" />
               </div>
               <h1 className="font-brand text-2xl uppercase tracking-wide">Primer Producto</h1>
               <p className="text-muted-foreground text-sm mt-1">Agrega tu primer ítem al menú. Puedes agregar más después.</p>
@@ -232,8 +244,9 @@ export default function SetupPage() {
 
             <form onSubmit={handleAddProduct} className="space-y-4">
               <div>
-                <label className="text-sm font-bold uppercase tracking-tighter pl-1 block mb-2">Nombre del producto</label>
+                <label htmlFor="setup-product-name" className="text-sm font-bold uppercase tracking-tighter pl-1 block mb-2">Nombre del producto</label>
                 <input
+                  id="setup-product-name"
                   type="text"
                   required
                   autoFocus
@@ -246,9 +259,11 @@ export default function SetupPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-sm font-bold uppercase tracking-tighter pl-1 block mb-2">Precio ($)</label>
+                  <label htmlFor="setup-product-price" className="text-sm font-bold uppercase tracking-tighter pl-1 block mb-2">Precio ($)</label>
                   <input
+                    id="setup-product-price"
                     type="number"
+                    inputMode="numeric"
                     required
                     min="1"
                     step="1"
@@ -259,8 +274,9 @@ export default function SetupPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-sm font-bold uppercase tracking-tighter pl-1 block mb-2">Categoría</label>
+                  <label htmlFor="setup-product-category" className="text-sm font-bold uppercase tracking-tighter pl-1 block mb-2">Categoría</label>
                   <select
+                    id="setup-product-category"
                     value={productCategory}
                     onChange={e => setProductCategory(e.target.value)}
                     className="w-full h-12 bg-muted rounded-xl px-4 outline-none focus:ring-2 ring-primary/50 transition-all text-foreground"
@@ -291,9 +307,9 @@ export default function SetupPage() {
 
         {/* ── Done ────────────────────────────────────────────────────────── */}
         {step === 'done' && (
-          <div className="bg-card border border-border rounded-[2.5rem] p-10 shadow-2xl text-center">
+          <div className="bg-card border border-border rounded-panel p-10 shadow-2xl text-center">
             <div className="inline-flex p-5 bg-green-500/10 rounded-full mb-4">
-              <CheckCircle className="h-14 w-14 text-green-500" />
+              <CheckCircle className="h-14 w-14 text-green-800" />
             </div>
             <h1 className="font-brand text-3xl uppercase tracking-wide mb-2">¡Listo!</h1>
             <p className="text-muted-foreground">Tu food truck digital está configurado. Redirigiendo...</p>

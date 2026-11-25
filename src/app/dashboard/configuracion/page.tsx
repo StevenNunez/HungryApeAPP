@@ -1,48 +1,39 @@
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import { PanelSkeleton } from '@/components/compartido/PanelSkeleton';
+import { useTenant } from '@/hooks/useTenant';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Loader2, ArrowLeft, Save, Image as ImageIcon, Store, CreditCard, AlertTriangle, CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { Loader2, ArrowLeft, Save, Store, CreditCard, AlertTriangle, CheckCircle2, Clock, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import Image from 'next/image';
 import Link from 'next/link';
 import { getEffectivePlan } from '@/lib/data';
+import { PLAN_LABEL } from '@/lib/plans';
 import { ImageUploader } from '@/components/ui/image-uploader';
 import { OnlinePaymentsCard } from '@/components/configuracion/OnlinePaymentsCard';
+import { TeamCard } from '@/components/configuracion/TeamCard';
+import { mensajeParaPersona } from '@/lib/errores';
 
 export default function ConfigurationPage() {
-  const router = useRouter();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(true);
+  const { tenant: savedTenant, setTenant: setSavedTenant, status } = useTenant();
+  const loading = status === 'loading';
   const [saving, setSaving] = useState(false);
-  const [tenant, setTenant] = useState<any>(null);
+  // Editable copy of the business; saved back into the panel context on success
+  const [tenant, setTenant] = useState<any>(savedTenant);
   const [cancelling, setCancelling] = useState(false);
   const [confirmCancel, setConfirmCancel] = useState(false);
 
+  const savedId = savedTenant?.id;
   useEffect(() => {
-    async function loadData() {
-      const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
-        router.push('/login');
-        return;
-      }
-
-      const { data: tData } = await supabase
-        .from('tenants')
-        .select('*')
-        .eq('owner_id', user.id)
-        .single();
-
-      if (tData) setTenant(tData);
-      setLoading(false);
-    }
-    loadData();
-  }, [router]);
+    if (savedTenant && (!tenant || tenant.id !== savedId)) setTenant(savedTenant);
+    // Only when a different business arrives — never overwrite what the owner is typing
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedId]);
 
   const handleUpdateTenant = async () => {
     if (!tenant) return;
@@ -68,8 +59,9 @@ export default function ConfigurationPage() {
 
     setSaving(false);
     if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
+      toast({ title: 'No se pudo completar', description: mensajeParaPersona(error, 'configuración'), variant: 'destructive' });
     } else {
+      setSavedTenant(tenant);
       toast({ title: 'Perfil actualizado', description: 'Tus datos se guardaron correctamente.' });
     }
   };
@@ -81,21 +73,18 @@ export default function ConfigurationPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al cancelar');
       setTenant((prev: any) => ({ ...prev, subscription_status: 'cancelled' }));
+      if (savedTenant) setSavedTenant({ ...savedTenant, subscription_status: 'cancelled' });
       setConfirmCancel(false);
       toast({ title: 'Suscripción cancelada', description: 'Tu acceso continúa hasta que termine el período pagado.' });
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+      toast({ title: 'No se pudo completar', description: mensajeParaPersona(err, 'configuración'), variant: 'destructive' });
     } finally {
       setCancelling(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-muted/30">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
+  if (loading || (!tenant && savedTenant)) {
+    return <PanelSkeleton cards={2} label="Cargando tu configuración…" />;
   }
 
   if (!tenant) {
@@ -121,11 +110,11 @@ export default function ConfigurationPage() {
           </div>
         </div>
 
-        <Card className="rounded-[2.5rem] border-transparent shadow-2xl bg-card overflow-hidden">
+        <Card className="rounded-panel border-transparent shadow-2xl bg-card overflow-hidden">
           <CardHeader className="bg-muted p-8 border-b border-border text-center">
             <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4 border-4 border-background shadow-lg">
               {tenant.logo_url ? (
-                <img src={tenant.logo_url} alt="Logo" className="w-full h-full object-cover rounded-full" />
+                <Image src={tenant.logo_url} alt={`Logo de ${tenant.name}`} width={80} height={80} className="w-full h-full object-cover rounded-full" />
               ) : (
                 <Store className="h-8 w-8 text-primary" />
               )}
@@ -182,7 +171,7 @@ export default function ConfigurationPage() {
           </CardContent>
         </Card>
 
-        <Card className="rounded-[2.5rem] border-transparent shadow-xl bg-card overflow-hidden">
+        <Card className="rounded-panel border-transparent shadow-xl bg-card overflow-hidden">
           <CardHeader className="bg-muted/50 p-8 border-b border-border">
             <CardTitle className="text-xl font-brand uppercase text-primary">Cuentas Bancarias</CardTitle>
             <CardDescription>Datos para transferencias cuando elijen ese método de pago.</CardDescription>
@@ -224,6 +213,9 @@ export default function ConfigurationPage() {
           </CardContent>
         </Card>
 
+        {/* ── Equipo: miembros y roles ── */}
+        <TeamCard />
+
         {/* ── Pagos online (Mercado Pago, Pro) ── */}
         <Suspense fallback={null}>
           <OnlinePaymentsCard />
@@ -244,13 +236,7 @@ export default function ConfigurationPage() {
 
 // ─── Subscription card component ─────────────────────────────────────────────
 
-const PLAN_LABELS: Record<string, string> = {
-  basico: 'Plan Básico',
-  starter: 'Plan Starter',
-  pro: 'Plan Pro',
-  enterprise: 'Plan Enterprise',
-  gratis: 'Sin plan activo',
-};
+const PLAN_LABELS: Record<string, string> = PLAN_LABEL;
 
 function SubscriptionCard({
   tenant,
@@ -280,17 +266,17 @@ function SubscriptionCard({
   const trialExpired = isTrial && trialDaysLeft !== null && trialDaysLeft === 0;
 
   const statusConfig = isCancelled
-    ? { label: 'Cancelada', icon: XCircle, color: 'text-red-500', bg: 'bg-red-500/10 border-red-500/30' }
+    ? { label: 'Cancelada', icon: XCircle, color: 'text-red-700', bg: 'bg-red-500/10 border-red-500/30' }
     : trialExpired
-    ? { label: 'Prueba vencida', icon: AlertTriangle, color: 'text-amber-500', bg: 'bg-amber-500/10 border-amber-500/30' }
+    ? { label: 'Prueba vencida', icon: AlertTriangle, color: 'text-amber-800', bg: 'bg-amber-500/10 border-amber-500/30' }
     : isTrial
-    ? { label: `Prueba gratuita · ${trialDaysLeft} días restantes`, icon: Clock, color: 'text-blue-500', bg: 'bg-blue-500/10 border-blue-500/30' }
-    : { label: 'Activa', icon: CheckCircle2, color: 'text-green-500', bg: 'bg-green-500/10 border-green-500/30' };
+    ? { label: `Prueba gratuita · ${trialDaysLeft} días restantes`, icon: Clock, color: 'text-blue-800', bg: 'bg-blue-500/10 border-blue-500/30' }
+    : { label: 'Activa', icon: CheckCircle2, color: 'text-green-800', bg: 'bg-green-500/10 border-green-500/30' };
 
   const StatusIcon = statusConfig.icon;
 
   return (
-    <Card className="rounded-[2.5rem] border-transparent shadow-xl bg-card overflow-hidden">
+    <Card className="rounded-panel border-transparent shadow-xl bg-card overflow-hidden">
       <CardHeader className="bg-muted/50 p-8 border-b border-border">
         <div className="flex items-center gap-3">
           <CreditCard className="h-5 w-5 text-primary" />
@@ -327,7 +313,7 @@ function SubscriptionCard({
 
         {trialExpired && (
           <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 text-sm">
-            <p className="font-bold text-amber-600 mb-1">Tu prueba ha vencido.</p>
+            <p className="font-bold text-amber-800 mb-1">Tu prueba ha vencido.</p>
             <p className="text-muted-foreground text-xs">Activa tu plan para seguir recibiendo pedidos.</p>
           </div>
         )}
@@ -371,7 +357,7 @@ function SubscriptionCard({
             ) : (
               <div className="bg-red-500/10 border-2 border-red-500/30 rounded-2xl p-6 space-y-4">
                 <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-red-500 shrink-0 mt-0.5" />
+                  <AlertTriangle className="h-5 w-5 text-red-700 shrink-0 mt-0.5" />
                   <div>
                     <p className="font-bold text-red-600">¿Confirmas la cancelación?</p>
                     <p className="text-sm text-muted-foreground mt-1">

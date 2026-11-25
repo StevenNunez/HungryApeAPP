@@ -120,6 +120,7 @@ export function ImageUploader({
         <div className={cn('relative w-full', paddingBottom)}>
           {value ? (
             <div className="absolute inset-0">
+              {/* eslint-disable-next-line @next/next/no-img-element -- preview of an uploaded file (may be a blob: URL) */}
               <img src={value} alt="preview" className="w-full h-full object-cover" />
               {/* Hover overlay */}
               <div className="absolute inset-0 bg-black/55 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
@@ -153,7 +154,7 @@ export function ImageUploader({
                 <>
                   <Upload className="h-8 w-8 text-muted-foreground" />
                   <span className="text-sm font-semibold text-muted-foreground">{placeholder}</span>
-                  <span className="text-[11px] text-muted-foreground/60">JPG · PNG · WEBP — se comprime automáticamente</span>
+                  <span className="text-xs text-muted-foreground/60">JPG · PNG · WEBP — se comprime automáticamente</span>
                 </>
               )}
             </div>
@@ -166,7 +167,7 @@ export function ImageUploader({
         <button
           type="button"
           onClick={() => setUrlMode(true)}
-          className="text-[11px] text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
+          className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
         >
           <LinkIcon className="h-3 w-3" /> Usar URL externa
         </button>

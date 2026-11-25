@@ -5,6 +5,7 @@ import { Bell, BellRing, Check, Loader2, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { mensajeParaPersona } from '@/lib/errores';
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
 const WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER;
@@ -75,7 +76,7 @@ export function NotifyMe({ orderId }: { orderId: string }) {
     } catch (err: any) {
       console.error('enablePush', err);
       setPush('idle');
-      toast({ title: 'No se pudo activar el aviso', description: err?.message, variant: 'destructive' });
+      toast({ title: 'No se pudo activar el aviso', description: mensajeParaPersona(err, 'aviso de pedido listo'), variant: 'destructive' });
     }
   };
 
@@ -92,7 +93,7 @@ export function NotifyMe({ orderId }: { orderId: string }) {
       setWaOpened(true);
       window.open(json.url, '_blank', 'noopener,noreferrer');
     } catch (err: any) {
-      toast({ title: 'WhatsApp no disponible', description: err?.message, variant: 'destructive' });
+      toast({ title: 'WhatsApp no disponible', description: mensajeParaPersona(err, 'aviso de pedido listo'), variant: 'destructive' });
     } finally {
       setWaLoading(false);
     }
@@ -137,7 +138,7 @@ export function NotifyMe({ orderId }: { orderId: string }) {
           </p>
         )}
         {push === 'denied' && (
-          <p className="text-xs text-amber-600">Bloqueaste las notificaciones de este sitio. Puedes activarlas desde la configuración del navegador.</p>
+          <p className="text-xs text-amber-800">Bloqueaste las notificaciones de este sitio. Puedes activarlas desde la configuración del navegador.</p>
         )}
         {iosHint && pushAvailable && (
           <p className="text-xs text-muted-foreground">

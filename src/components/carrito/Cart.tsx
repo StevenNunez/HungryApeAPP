@@ -1,13 +1,15 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { ShoppingCart, Trash2, Plus, Minus, ArrowRight, Banknote, CreditCard, Smartphone, CheckCircle2, Loader2, Store, UtensilsCrossed, ShoppingBag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger, SheetFooter } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { useCart } from '@/hooks/useCart';
 import { formatCLP } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { createOrder as supabaseCreateOrder } from '@/lib/data';
+import { allowedPaymentMethods } from '@/lib/plans';
 import type { OrderType } from '@/lib/types';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/input';
@@ -64,8 +66,11 @@ export function Cart() {
     const [isConfirming, setIsConfirming] = useState(false);
     const [tenantPlan, setTenantPlan] = useState<string>('gratis');
     const [onlineEnabled, setOnlineEnabled] = useState(false);
+    const [nicknameError, setNicknameError] = useState(false);
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
 
-    const { cartItems, removeFromCart, updateQuantity, clearCart, cartTotal } = useCart();
+    const { cartItems, removeFromCart, updateQuantity, clearCart, cartTotal, ordersOpen } = useCart();
     const router = useRouter();
     const { toast } = useToast();
 
@@ -99,17 +104,13 @@ export function Cart() {
     }, [open, tenantSlug]);
 
     // Filter payment methods based on plan
-    const visiblePaymentMethods = PAYMENT_METHODS.filter(method => {
-        if (method.id === 'online') return onlineEnabled; // only when the business connected Mercado Pago
-        if (tenantPlan === 'gratis' || tenantPlan === 'starter') {
-            return method.id === 'cash' || method.id === 'transfer';
-        }
-        return true; // card only for plans above starter
-    });
+    // Same rule as the server (create_order) and the landing: see allowedPaymentMethods
+    const allowed = allowedPaymentMethods(tenantPlan, onlineEnabled);
+    const visiblePaymentMethods = PAYMENT_METHODS.filter(method => allowed.includes(method.id));
 
     const reset = () => {
         setStep('cart');
-        setNickname('');
+        setNicknameError(false);
         setOrderType('aqui');
         setSelectedPayment(null);
         setIsConfirming(false);
@@ -122,11 +123,8 @@ export function Cart() {
 
     const handleGoToPayment = () => {
         if (!nickname.trim()) {
-            toast({
-                title: 'Apodo requerido',
-                description: 'Por favor, ingresa un apodo para identificarte.',
-                variant: 'destructive',
-            });
+            setNicknameError(true);
+            document.getElementById('cart-nickname')?.focus();
             return;
         }
         setStep('payment');
@@ -146,11 +144,15 @@ export function Cart() {
         try {
             const order = await supabaseCreateOrder(tenantSlug, nickname, cartItems, selectedPayment, orderType);
 
+            const ref = order.shortId ? `#${order.shortId}` : `#${order.id.slice(0, 8)}`;
             toast({
-                title: '¡Pedido enviado a cocina! 🍳',
-                description: `Identificador: ${order.shortId ? '#' + order.shortId : 'ID:' + order.id.slice(0, 8)}. ¡Prepárate!`,
+                title: `¡Pedido ${ref} creado! 🦍`,
+                description: selectedPayment === 'online'
+                    ? 'Te llevamos a pagar. Apenas se confirme el pago, pasa a cocina.'
+                    : 'Falta el pago: paga en caja con tu código para que empecemos a cocinar.',
             });
 
+            setNickname('');
             clearCart();
             handleOpenChange(false);
 
@@ -173,11 +175,14 @@ export function Cart() {
             const isLimitReached = msg.includes('LIMIT_REACHED');
             const isOutOfStock = msg.includes('OUT_OF_STOCK') || msg.includes('PRODUCT_NOT_FOUND');
             const isTooMany = msg.includes('TOO_MANY_PENDING');
+            const isPaused = msg.includes('ORDERS_PAUSED');
 
             toast({
-                title: isLimitReached ? 'Local muy ocupado 😥' : isOutOfStock ? 'Producto agotado' : isTooMany ? 'Demasiados pedidos seguidos' : 'Error al confirmar',
-                description: isLimitReached
-                    ? 'Este local ha alcanzado el límite de pedidos por hoy. Por favor, realiza tu pago o pide directamente en caja.'
+                title: isPaused ? 'Pedidos por la app en pausa' : isLimitReached ? 'Local muy ocupado 😥' : isOutOfStock ? 'Producto agotado' : isTooMany ? 'Demasiados pedidos seguidos' : 'Error al confirmar',
+                description: isPaused
+                    ? 'Este local no está recibiendo pedidos por la app. Puedes pedir directamente en caja.'
+                    : isLimitReached
+                    ? 'Este local llegó a su límite de pedidos por la app hoy. Puedes pedir directamente en caja.'
                     : isTooMany
                     ? 'Ya tienes pedidos pendientes de pago en este local. Págalos en caja o espera unos minutos antes de pedir de nuevo.'
                     : isOutOfStock
@@ -197,17 +202,35 @@ export function Cart() {
                 <Button
                     variant="outline"
                     size="icon"
-                    className="relative border-border hover:border-primary hover:text-primary transition-colors"
-                    aria-label="Abrir carrito"
+                    className="relative h-11 w-11 border-border hover:border-primary hover:text-primary transition-colors"
+                    aria-label={totalItems > 0 ? `Abrir carrito (${totalItems} productos)` : 'Abrir carrito'}
                 >
-                    <ShoppingCart className="h-4 w-4" />
+                    <ShoppingCart className="h-5 w-5" />
                     {totalItems > 0 && (
-                        <span className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground animate-bounce shadow-lg">
+                        <span key={totalItems} className="absolute -top-2 -right-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground animate-in zoom-in-50 duration-300 shadow-lg">
                             {totalItems}
                         </span>
                     )}
                 </Button>
             </SheetTrigger>
+
+            {/* Main action of a QR menu: a fixed bar within thumb reach while there's something in the cart */}
+            {mounted && ordersOpen && totalItems > 0 && !open && createPortal(
+                <div className="fixed inset-x-0 bottom-0 z-40 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-gradient-to-t from-background via-background/95 to-transparent">
+                    <button
+                        type="button"
+                        onClick={() => setOpen(true)}
+                        className="mx-auto flex w-full max-w-lg items-center justify-between gap-3 rounded-2xl bg-primary px-5 h-14 text-primary-foreground font-bold shadow-xl active:scale-[0.98] transition-transform"
+                    >
+                        <span className="flex items-center gap-2">
+                            <ShoppingCart className="h-5 w-5" />
+                            Ver pedido · {totalItems} {totalItems === 1 ? 'producto' : 'productos'}
+                        </span>
+                        <span className="font-brand text-xl tracking-tight">{formatCLP(cartTotal)}</span>
+                    </button>
+                </div>,
+                document.body,
+            )}
 
             <SheetContent className="flex flex-col gap-0 p-0 sm:max-w-md">
                 <SheetHeader className="px-6 py-4 border-b border-border bg-card/10">
@@ -225,19 +248,22 @@ export function Cart() {
                             {step === 'cart' ? '🛒 Tu Carrito' : '💳 Pago'}
                         </SheetTitle>
                     </div>
-                    <div className="flex gap-2 mt-2">
+                    <ol className="flex gap-2 mt-2" aria-label="Pasos del pedido">
                         {(['cart', 'payment'] as Step[]).map((s, i) => (
-                            <div key={s} className="flex items-center gap-2">
+                            <li key={s} className="flex items-center gap-2" aria-current={step === s ? 'step' : undefined}>
                                 <div
-                                    className={`flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold transition-colors ${step === s ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
+                                    className={`flex items-center justify-center w-6 h-6 rounded-full text-xs font-bold transition-colors ${step === s ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'
                                         }`}
                                 >
                                     {i + 1}
                                 </div>
+                                <span className={`text-xs font-semibold ${step === s ? 'text-foreground' : 'text-muted-foreground'}`}>
+                                    {s === 'cart' ? 'Tu pedido' : 'Pago'}
+                                </span>
                                 {i === 0 && <div className="w-4 h-px bg-border" />}
-                            </div>
+                            </li>
                         ))}
-                    </div>
+                    </ol>
                 </SheetHeader>
 
                 {step === 'cart' && (
@@ -261,44 +287,45 @@ export function Cart() {
                                             <div className="flex-1 min-w-0">
                                                 <h4 className="font-bold text-sm text-foreground leading-tight truncate">{item.name}</h4>
                                                 {item.selectedModifiers && item.selectedModifiers.length > 0 && (
-                                                    <p className="text-[10px] text-primary/80 mt-0.5 leading-tight">
+                                                    <p className="text-xs text-primary mt-0.5 leading-tight">
                                                         {item.selectedModifiers.map(m => m.optionName).join(' · ')}
                                                     </p>
                                                 )}
-                                                <p className="text-[10px] uppercase font-bold text-muted-foreground mt-0.5 tracking-wider">{item.category}</p>
+                                                <p className="text-xs uppercase font-bold text-muted-foreground mt-0.5 tracking-wider">{item.category}</p>
 
-                                                <div className="flex items-center gap-4 mt-2">
-                                                    <div className="flex items-center bg-muted/50 rounded-lg p-0.5 border border-border/50">
+                                                <div className="flex items-center justify-between gap-3 mt-2">
+                                                    <div className="flex items-center bg-muted/50 rounded-xl border border-border/50">
                                                         <button
                                                             onClick={() => updateQuantity(item.cartKey, item.quantity - 1)}
-                                                            className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-background transition-colors text-muted-foreground hover:text-primary"
-                                                            aria-label="Disminuir cantidad"
+                                                            className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-background transition-colors text-foreground hover:text-primary"
+                                                            aria-label={item.quantity === 1 ? `Quitar ${item.name}` : `Quitar uno de ${item.name}`}
                                                         >
-                                                            <Minus className="h-3 w-3" />
+                                                            <Minus className="h-4 w-4" />
                                                         </button>
-                                                        <span className="w-6 text-center text-[11px] font-bold tabular-nums">{item.quantity}</span>
+                                                        <span className="w-7 text-center text-sm font-bold tabular-nums" aria-live="polite">{item.quantity}</span>
                                                         <button
                                                             onClick={() => updateQuantity(item.cartKey, item.quantity + 1)}
-                                                            className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-background transition-colors text-muted-foreground hover:text-primary"
-                                                            aria-label="Agregar cantidad"
+                                                            disabled={item.quantity >= Math.min(item.stock, 10)}
+                                                            className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-background transition-colors text-foreground hover:text-primary disabled:opacity-40"
+                                                            aria-label={`Agregar otro ${item.name}`}
                                                         >
-                                                            <Plus className="h-3 w-3" />
+                                                            <Plus className="h-4 w-4" />
                                                         </button>
                                                     </div>
 
                                                     <button
                                                         onClick={() => removeFromCart(item.cartKey)}
-                                                        className="text-muted-foreground/50 hover:text-destructive transition-colors"
-                                                        aria-label={`Eliminar ${item.name}`}
+                                                        className="w-11 h-11 flex items-center justify-center rounded-xl text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                                                        aria-label={`Eliminar ${item.name} del pedido`}
                                                     >
-                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                        <Trash2 className="h-4 w-4" />
                                                     </button>
                                                 </div>
                                             </div>
                                             <div className="text-right">
                                                 <p className="text-sm font-bold tracking-tight">{formatCLP((item.price + item.modifierPrice) * item.quantity)}</p>
                                                 {item.modifierPrice > 0 && (
-                                                    <p className="text-[10px] text-muted-foreground">{formatCLP(item.price)} base</p>
+                                                    <p className="text-xs text-muted-foreground">{formatCLP(item.price)} base</p>
                                                 )}
                                             </div>
                                         </div>
@@ -322,10 +349,12 @@ export function Cart() {
                                 <div className="space-y-3">
                                     {/* Tipo de pedido */}
                                     <div>
-                                        <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 pl-1">¿Cómo lo quieres?</p>
-                                        <div className="grid grid-cols-2 gap-2">
+                                        <p id="order-type-label" className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 pl-1">¿Cómo lo quieres?</p>
+                                        <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-labelledby="order-type-label">
                                             <button
                                                 type="button"
+                                                role="radio"
+                                                aria-checked={orderType === 'aqui'}
                                                 onClick={() => setOrderType('aqui')}
                                                 className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 transition-all font-semibold text-sm ${
                                                     orderType === 'aqui'
@@ -338,6 +367,8 @@ export function Cart() {
                                             </button>
                                             <button
                                                 type="button"
+                                                role="radio"
+                                                aria-checked={orderType === 'llevar'}
                                                 onClick={() => setOrderType('llevar')}
                                                 className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 transition-all font-semibold text-sm ${
                                                     orderType === 'llevar'
@@ -352,16 +383,29 @@ export function Cart() {
                                     </div>
 
                                     {/* Apodo */}
-                                    <div className="relative">
-                                        <Store className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                        <Input
-                                            id="cart-nickname"
-                                            placeholder="¿Tu apodo?"
-                                            value={nickname}
-                                            onChange={(e) => setNickname(e.target.value)}
-                                            maxLength={30}
-                                            className="bg-muted border-0 h-12 pl-10 rounded-xl focus:ring-2 ring-primary/20 transition-all font-medium"
-                                        />
+                                    <div>
+                                        <label htmlFor="cart-nickname" className="block text-xs font-bold uppercase tracking-widest text-muted-foreground mb-2 pl-1">
+                                            Tu apodo (así te llamamos al retirar)
+                                        </label>
+                                        <div className="relative">
+                                            <Store className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden="true" />
+                                            <Input
+                                                id="cart-nickname"
+                                                placeholder="Ej: Coté, Pancho, Mesa 4"
+                                                value={nickname}
+                                                onChange={(e) => { setNickname(e.target.value); if (e.target.value.trim()) setNicknameError(false); }}
+                                                maxLength={30}
+                                                autoComplete="nickname"
+                                                aria-invalid={nicknameError}
+                                                aria-describedby={nicknameError ? 'cart-nickname-error' : undefined}
+                                                className={`bg-muted h-12 pl-10 rounded-xl focus:ring-2 ring-primary/20 transition-all font-medium ${nicknameError ? 'border-2 border-red-700' : 'border-0'}`}
+                                            />
+                                        </div>
+                                        {nicknameError && (
+                                            <p id="cart-nickname-error" className="mt-1.5 pl-1 text-sm font-semibold text-red-700">
+                                                Escribe un apodo para que te podamos llamar.
+                                            </p>
+                                        )}
                                     </div>
                                     <NicknameSuggester onNicknameSelect={(n) => setNickname(n.slice(0, 30))} />
                                 </div>
@@ -382,7 +426,7 @@ export function Cart() {
                                     className="w-full h-14 rounded-2xl bg-primary text-primary-foreground font-bold text-lg shadow-xl hover:shadow-primary/20 transition-all active:scale-95 gap-2"
                                     onClick={handleGoToPayment}
                                 >
-                                    Siguiente paso
+                                    Elegir cómo pagar
                                     <ArrowRight className="h-5 w-5" />
                                 </Button>
                             </div>
@@ -397,15 +441,18 @@ export function Cart() {
                                 <p className="text-sm font-medium text-foreground">
                                     Confirmar pedido para: <span className="text-primary font-bold">{nickname}</span>
                                 </p>
-                                <p className="text-[11px] text-muted-foreground mt-1">Selecciona cómo pagarás al retirar:</p>
+                                <p id="payment-label" className="text-xs text-muted-foreground mt-1">Selecciona cómo vas a pagar:</p>
                             </div>
 
-                            <div className="grid grid-cols-1 gap-3">
+                            <div className="grid grid-cols-1 gap-3" role="radiogroup" aria-labelledby="payment-label">
                                 {visiblePaymentMethods.map((method) => {
                                     const isSelected = selectedPayment === method.id;
                                     return (
                                         <button
                                             key={method.id}
+                                            type="button"
+                                            role="radio"
+                                            aria-checked={isSelected}
                                             onClick={() => setSelectedPayment(method.id)}
                                             className={`relative w-full text-left rounded-2xl border-2 p-4 transition-all duration-300 ${isSelected
                                                 ? 'border-primary bg-primary/5 shadow-lg'
@@ -423,7 +470,7 @@ export function Cart() {
                                                             {method.label}
                                                         </span>
                                                         {method.badge && (
-                                                            <Badge className="bg-primary/20 text-primary hover:bg-primary/20 border-0 text-[10px] h-4 px-1 shadow-none">
+                                                            <Badge className="bg-primary/20 text-primary hover:bg-primary/20 border-0 text-xs h-5 px-1.5 shadow-none">
                                                                 {method.badge}
                                                             </Badge>
                                                         )}
@@ -444,14 +491,14 @@ export function Cart() {
                         <div className="border-t border-border px-6 py-6 space-y-5 bg-card/5">
                             {selectedPayment && (
                                 <div className="bg-muted p-4 rounded-xl space-y-1 animate-in zoom-in-95 duration-300">
-                                    <p className="text-[10px] font-bold uppercase text-muted-foreground tracking-widest">Instrucción:</p>
+                                    <p className="text-xs font-bold uppercase text-muted-foreground tracking-widest">Cómo pagar:</p>
                                     <p className="text-xs font-bold leading-relaxed">{PAYMENT_METHODS.find(m => m.id === selectedPayment)?.instruction}</p>
                                 </div>
                             )}
 
                             <div className="space-y-1">
                                 <div className="flex justify-between text-xs font-bold text-muted-foreground uppercase px-1">
-                                    <span>{totalItems} {totalItems === 1 ? 'item' : 'items'}</span>
+                                    <span>{totalItems} {totalItems === 1 ? 'producto' : 'productos'}</span>
                                     <span>A pagar</span>
                                 </div>
                                 <div className="flex justify-between items-center font-brand text-3xl tracking-tight">

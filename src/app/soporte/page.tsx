@@ -47,7 +47,7 @@ const faqs = [
   },
   {
     q: '¿Puedo tener múltiples menús o locales?',
-    a: 'El plan Enterprise incluye soporte multi-sucursales. Con los planes Básico, Starter y Pro, cada cuenta corresponde a un local.',
+    a: 'Hoy cada cuenta corresponde a un local, en todos los planes. El soporte multi-sucursales está en desarrollo para el plan Enterprise, que ya incluye equipo con roles (encargados y cocina con su propia cuenta).',
   },
 ];
 

@@ -85,16 +85,29 @@ export const FREE_PLAN_ALERT_THRESHOLD = Math.floor(FREE_PLAN_MAX_ORDERS * 0.8);
 // getEffectivePlan lives in ./plans (pure, shared with server routes); re-exported for existing imports
 export { getEffectivePlan } from './plans';
 
-/** Get the number of orders made today for a given tenant. */
+/** Start of today in Chile (America/Santiago), as an ISO instant — same day the server counts. */
+export function startOfTodayInChile(now: Date = new Date()): string {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Santiago',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+    }).formatToParts(now).map(p => [p.type, p.value]),
+  );
+  const wallAsUtc = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second);
+  const offsetMs = wallAsUtc - Math.floor(now.getTime() / 1000) * 1000;
+  return new Date(Date.UTC(+parts.year, +parts.month - 1, +parts.day) - offsetMs).toISOString();
+}
+
+/** Orders made today (Chile) for a tenant — cancelled ones don't count towards the free limit. */
 export async function getTodayOrderCount(tenantId: string): Promise<number> {
   const supabase = createClient();
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
   const { count } = await supabase
     .from('orders')
     .select('id', { count: 'exact', head: true })
     .eq('tenant_id', tenantId)
-    .gte('created_at', today.toISOString());
+    .neq('status', 'Cancelado')
+    .gte('created_at', startOfTodayInChile());
   return count ?? 0;
 }
 
@@ -159,11 +172,14 @@ interface PublicOrderPayload {
 }
 
 /** Fetch a single order (public tracking) through the `get_order_public` RPC. */
+/** Public order tracking. Resolves null when the order doesn't exist; throws on network/DB errors. */
 export async function getOrderById(orderId: string): Promise<Order | null> {
   const supabase = createClient();
 
   const { data: rpcData, error } = await supabase.rpc('get_order_public', { p_order_id: orderId });
-  if (error || !rpcData) return null;
+  // A failed request is not the same as "this order does not exist": let the screen offer a retry
+  if (error) throw new Error('No se pudo cargar el pedido');
+  if (!rpcData) return null;
   const data = rpcData as unknown as PublicOrderPayload;
 
   const cartItems: CartItem[] = (data.items || []).map((row: any) => ({
@@ -206,79 +222,79 @@ export async function getOrderById(orderId: string): Promise<Order | null> {
   );
 }
 
-/** Fetch all orders for a given tenant (kitchen view). */
-export async function getOrdersByTenant(tenantSlug: string = DEMO_TENANT_SLUG): Promise<Order[]> {
+/** Order row with its items and modifiers embedded (one query instead of three). */
+const KITCHEN_ORDER_SELECT = '*, order_items(*, order_item_modifiers(*))';
+
+function mapKitchenOrder(row: any): Order {
+  const cartItems: CartItem[] = (row.order_items || []).map((item: any) => ({
+    id: item.product_id,
+    tenantId: row.tenant_id,
+    name: item.product_name,
+    description: '',
+    price: Number(item.price),
+    imageUrl: '',
+    category: '',
+    isAvailable: true,
+    isArchived: false,
+    stock: 0,
+    aiHint: '',
+    quantity: item.quantity,
+    cartKey: item.id,
+    selectedModifiers: (item.order_item_modifiers || []).map((m: any) => ({
+      optionId: m.option_id ?? '',
+      optionName: m.option_name,
+      groupName: m.group_name,
+      priceDelta: Number(m.price_delta),
+    })),
+    modifierPrice: 0,
+  }));
+  return mapOrderRow(row, cartItems);
+}
+
+/** Hours a delivered order stays visible in the kitchen ("Últimos entregados"). */
+const KITCHEN_DELIVERED_WINDOW_H = 3;
+
+/**
+ * Orders the kitchen needs right now: everything still in progress plus the ones
+ * delivered in the last few hours — never the whole history of the business.
+ * Abandoned "Por Pagar" orders (>60 min) are cancelled first, returning their stock.
+ * Throws on network/DB errors so the screen can tell "failed" from "no orders".
+ */
+export async function getKitchenOrders(tenantId: string): Promise<Order[]> {
   const supabase = createClient();
 
-  const { data: tenant } = await supabase
-    .from('tenants_public')
-    .select('id')
-    .eq('slug', tenantSlug)
-    .single();
+  // Best effort: if it fails the kitchen still loads (create_order also expires them)
+  await supabase.rpc('expire_unpaid_orders_for', { p_tenant_id: tenantId }).then(
+    () => undefined,
+    () => undefined,
+  );
 
-  if (!tenant) return [];
-
-  let query = supabase
+  const since = new Date(Date.now() - KITCHEN_DELIVERED_WINDOW_H * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabase
     .from('orders')
-    .select('*')
-    .eq('tenant_id', tenant.id)
-    .order('created_at', { ascending: true });
+    .select(KITCHEN_ORDER_SELECT)
+    .eq('tenant_id', tenantId)
+    .or(`status.in.("Por Pagar",Pendiente,"En preparación",Listo),and(status.eq.Entregado,delivered_at.gte."${since}")`)
+    .order('created_at', { ascending: true })
+    .limit(300);
 
-  // Para la demo: solo mostrar pedidos de las últimas 2 horas
-  // Los pedidos viejos se borran en /api/demo/cleanup, pero esto es defensa adicional
-  if (tenantSlug === DEMO_TENANT_SLUG) {
-    const since = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-    query = query.gte('created_at', since);
+  if (error) {
+    console.error('Error fetching kitchen orders:', error.message);
+    throw new Error('No se pudieron cargar los pedidos');
   }
+  return (data || []).map(mapKitchenOrder);
+}
 
-  const { data: orderRows, error } = await query;
-
-  if (error || !orderRows) return [];
-
-  // Fetch all order items in one call
-  const orderIds = orderRows.map(o => o.id);
-  const { data: allItems } = await supabase
-    .from('order_items')
-    .select('*')
-    .in('order_id', orderIds);
-
-  // Fetch all modifiers for those items
-  const allItemIds = (allItems || []).map((i: any) => i.id);
-  const { data: allModifiers } = allItemIds.length > 0
-    ? await supabase.from('order_item_modifiers').select('*').in('order_item_id', allItemIds)
-    : { data: [] };
-
-  return orderRows.map(row => {
-    const rowItems = (allItems || []).filter((i: any) => i.order_id === row.id);
-    const cartItems: CartItem[] = rowItems.map((item: any) => {
-      const mods = (allModifiers || [])
-        .filter((m: any) => m.order_item_id === item.id)
-        .map((m: any) => ({
-          optionId: m.option_id ?? '',
-          optionName: m.option_name,
-          groupName: m.group_name,
-          priceDelta: Number(m.price_delta),
-        }));
-      return {
-        id: item.product_id,
-        tenantId: row.tenant_id,
-        name: item.product_name,
-        description: '',
-        price: Number(item.price),
-        imageUrl: '',
-        category: '',
-        isAvailable: true,
-        isArchived: false,
-        stock: 0,
-        aiHint: '',
-        quantity: item.quantity,
-        cartKey: item.id,
-        selectedModifiers: mods,
-        modifierPrice: 0,
-      };
-    });
-    return mapOrderRow(row, cartItems);
-  });
+/** One order with its items, for when a new order arrives in the kitchen. */
+export async function getKitchenOrder(orderId: string): Promise<Order | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase
+    .from('orders')
+    .select(KITCHEN_ORDER_SELECT)
+    .eq('id', orderId)
+    .maybeSingle();
+  if (error) throw new Error('No se pudo cargar el pedido');
+  return data ? mapKitchenOrder(data) : null;
 }
 
 /** Update order status (kitchen actions). */
@@ -286,6 +302,7 @@ export async function updateOrderStatus(orderId: string, newStatus: OrderStatus)
   // Goes through the server so reaching "Listo" can fire the customer alerts (push / WhatsApp)
   const res = await fetch(`/api/orders/${orderId}/status`, {
     method: 'PATCH',
+    keepalive: true,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ status: newStatus }),
   });
@@ -301,37 +318,77 @@ export async function updateOrderStatus(orderId: string, newStatus: OrderStatus)
 // REALTIME SUBSCRIPTIONS
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Subscribe to new/updated orders for a tenant (for kitchen view). */
+export type RealtimeHealth = 'connecting' | 'live' | 'offline';
+
+/**
+ * Subscribe to new/updated orders for a tenant (kitchen view).
+ * `onHealth` reports the channel state: a tablet that sleeps or a shaky wifi drops
+ * the socket, and the kitchen must know (and catch up) instead of silently missing orders.
+ * On error the channel is torn down and re-created with backoff.
+ */
 export function subscribeToOrders(
   tenantId: string,
   onInsert: (order: any) => void,
   onUpdate: (order: any) => void,
+  onHealth?: (health: RealtimeHealth) => void,
 ) {
   const supabase = createClient();
+  let channel: ReturnType<typeof supabase.channel> | null = null;
+  let retry: ReturnType<typeof setTimeout> | null = null;
+  let attempt = 0;
+  let closed = false;
 
-  const channel = supabase
-    .channel(`orders-${tenantId}`)
-    .on(
-      'postgres_changes',
-      { event: 'INSERT', schema: 'public', table: 'orders', filter: `tenant_id=eq.${tenantId}` },
-      (payload) => onInsert(payload.new),
-    )
-    .on(
-      'postgres_changes',
-      { event: 'UPDATE', schema: 'public', table: 'orders', filter: `tenant_id=eq.${tenantId}` },
-      (payload) => onUpdate(payload.new),
-    )
-    .subscribe();
+  const connect = () => {
+    if (closed) return;
+    onHealth?.('connecting');
+    channel = supabase
+      .channel(`orders-${tenantId}-${Date.now()}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'orders', filter: `tenant_id=eq.${tenantId}` },
+        (payload) => onInsert(payload.new),
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'orders', filter: `tenant_id=eq.${tenantId}` },
+        (payload) => onUpdate(payload.new),
+      )
+      .subscribe((status) => {
+        if (closed) return;
+        if (status === 'SUBSCRIBED') {
+          attempt = 0;
+          onHealth?.('live');
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          onHealth?.('offline');
+          if (retry) return;
+          const ch = channel;
+          channel = null;
+          if (ch) void supabase.removeChannel(ch);
+          const delay = Math.min(30_000, 1000 * 2 ** attempt++);
+          retry = setTimeout(() => { retry = null; connect(); }, delay);
+        }
+      });
+  };
+
+  connect();
 
   return () => {
-    supabase.removeChannel(channel);
+    closed = true;
+    if (retry) clearTimeout(retry);
+    if (channel) void supabase.removeChannel(channel);
   };
+}
+
+/** Product change event as delivered by Realtime (row after the change, or the deleted id). */
+export interface ProductChange {
+  eventType: 'INSERT' | 'UPDATE' | 'DELETE';
+  row: any;
 }
 
 /** Subscribe to product changes for a tenant (for real-time stock/price updates in menu). */
 export function subscribeToProducts(
   tenantId: string,
-  onChange: () => void,
+  onChange: (change: ProductChange) => void,
 ) {
   const supabase = createClient();
 
@@ -340,7 +397,10 @@ export function subscribeToProducts(
     .on(
       'postgres_changes',
       { event: '*', schema: 'public', table: 'products', filter: `tenant_id=eq.${tenantId}` },
-      () => onChange(),
+      (payload: any) => onChange({
+        eventType: payload.eventType,
+        row: payload.eventType === 'DELETE' ? payload.old : payload.new,
+      }),
     )
     .subscribe();
 
@@ -348,3 +408,4 @@ export function subscribeToProducts(
     supabase.removeChannel(channel);
   };
 }
+

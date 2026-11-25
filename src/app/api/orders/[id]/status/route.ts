@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse, after } from 'next/server';
 import { createServerSupabaseClient, createServiceSupabaseClient } from '@/lib/supabase/server';
 import { DEMO_TENANT_ID, notifyOrderReady } from '@/lib/notify';
+import { anotarError } from '@/lib/errores-servidor';
+import { roleInTenant } from '@/lib/roles-server';
 
 const FLOW = ['Por Pagar', 'Pendiente', 'En preparación', 'Listo', 'Entregado'] as const;
-type Status = (typeof FLOW)[number];
+type Status = (typeof FLOW)[number] | 'Cancelado';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -12,8 +14,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  *
  * The kitchen moves an order forward through its states. Done on the server (instead of
  * straight from the browser) so that reaching "Listo" can trigger the customer alerts.
- * Only the business owner may do it — except the public demo, whose kitchen is anonymous.
- * Orders can only move forward.
+ * Only members of the business may do it — except the public demo, whose kitchen is anonymous.
+ * Orders can only move forward. 'Cancelado' voids an order that hasn't started cooking
+ * (Por Pagar / Pendiente) and returns its stock.
  */
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -22,7 +25,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   let status: Status;
   try {
     const body = await request.json();
-    if (!FLOW.includes(body?.status)) throw new Error('bad status');
+    if (!FLOW.includes(body?.status) && body?.status !== 'Cancelado') throw new Error('bad status');
     status = body.status;
   } catch {
     return NextResponse.json({ error: 'Estado inválido' }, { status: 400 });
@@ -41,14 +44,33 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 });
 
-    const { data: tenant } = await (service as any)
-      .from('tenants')
-      .select('owner_id')
-      .eq('id', order.tenant_id)
-      .single();
-    if (!tenant || tenant.owner_id !== user.id) {
+    // Any member of the business (owner, manager or kitchen staff) can move its orders
+    const role = await roleInTenant(service, order.tenant_id, user.id);
+    if (!role) {
       return NextResponse.json({ error: 'No autorizado' }, { status: 403 });
     }
+  }
+
+  if (status === 'Cancelado') {
+    if (order.status === 'Cancelado') return NextResponse.json({ ok: true, status, unchanged: true });
+    const { data: cancelled, error } = await (service as any).rpc('cancel_order', {
+      p_order_id: id,
+      p_reason: 'cocina',
+    });
+    if (error) {
+      await anotarError({ origen: 'servidor', donde: 'api/orders/status (anular)', error });
+      return NextResponse.json({ error: 'No se pudo anular el pedido' }, { status: 500 });
+    }
+    if (!cancelled) {
+      return NextResponse.json(
+        { error: 'Solo se puede anular un pedido que aún no se empieza a preparar' },
+        { status: 409 },
+      );
+    }
+    return NextResponse.json({ ok: true, status });
+  }
+  if (order.status === 'Cancelado') {
+    return NextResponse.json({ error: 'Este pedido fue anulado' }, { status: 409 });
   }
 
   const from = FLOW.indexOf(order.status);
@@ -60,7 +82,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   const { error } = await (service as any).from('orders').update({ status }).eq('id', id);
   if (error) {
-    console.error('Order status update failed:', error.message);
+    await anotarError({ origen: 'servidor', donde: 'api/orders/status', error });
     return NextResponse.json({ error: 'No se pudo actualizar el pedido' }, { status: 500 });
   }
 

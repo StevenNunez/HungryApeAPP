@@ -27,6 +27,7 @@ export default async function TenantMenuPage({ params }: Props) {
       tenantName={menu.tenant.name}
       initialItems={menu.items}
       initialGroups={menu.groups}
+      ordersOpen={menu.ordersOpen}
     />
   );
 }

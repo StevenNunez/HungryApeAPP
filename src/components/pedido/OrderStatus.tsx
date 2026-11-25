@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { Order, OrderStatus as OrderStatusType } from '@/lib/types';
 import { getOrderById } from '@/lib/data';
 import { Card, CardContent } from '@/components/ui/card';
-import { Clock, CookingPot, PackageCheck, ShieldCheck, Banknote, CreditCard, ArrowRight, Smartphone, AlertCircle } from 'lucide-react';
+import { Clock, CookingPot, PackageCheck, ShieldCheck, Banknote, CreditCard, ArrowRight, Smartphone, XCircle, RefreshCw } from 'lucide-react';
 import { formatCLP } from '@/lib/utils';
 import { NotifyMe } from './NotifyMe';
 
@@ -15,36 +15,43 @@ const statusInfo: Record<OrderStatusType, { icon: any; text: string; color: stri
   'Por Pagar': {
     icon: Banknote,
     text: 'Esperando confirmación de pago...',
-    color: 'text-red-500',
+    color: 'text-red-700',
     bgColor: 'bg-red-500',
   },
   'Pendiente': {
     icon: Clock,
     text: 'Tu pedido ha sido recibido y está en cola.',
-    color: 'text-amber-500',
+    color: 'text-amber-800',
     bgColor: 'bg-amber-500',
   },
   'En preparación': {
     icon: CookingPot,
     text: '¡Estamos preparando tu comida!',
-    color: 'text-blue-500',
+    color: 'text-blue-800',
     bgColor: 'bg-blue-500',
   },
   'Listo': {
     icon: PackageCheck,
     text: '¡Tu pedido está listo! Muestra tu código al retirar.',
-    color: 'text-accent',
+    color: 'text-foreground',
     bgColor: 'bg-accent',
   },
   'Entregado': {
     icon: ShieldCheck,
     text: '¡Entregado! Buen provecho 🦍',
-    color: 'text-green-500',
+    color: 'text-green-800',
     bgColor: 'bg-green-500',
+  },
+  'Cancelado': {
+    icon: XCircle,
+    text: 'Este pedido se anuló.',
+    color: 'text-muted-foreground',
+    bgColor: 'bg-muted',
   },
 };
 
 import { useToast } from '@/hooks/use-toast';
+import { mensajeParaPersona } from '@/lib/errores';
 
 export function OrderStatus({ orderId }: { orderId: string }) {
   const { toast } = useToast();
@@ -53,6 +60,7 @@ export function OrderStatus({ orderId }: { orderId: string }) {
 
   const [order, setOrder] = useState<Order | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [paying, setPaying] = useState(false);
 
   // Starts / resumes the Mercado Pago checkout of an online-payment order
@@ -64,21 +72,31 @@ export function OrderStatus({ orderId }: { orderId: string }) {
       if (!res.ok || !json.url) throw new Error(json?.error || 'No se pudo iniciar el pago');
       window.location.href = json.url;
     } catch (err: any) {
-      toast({ title: 'No pudimos abrir el pago', description: err?.message, variant: 'destructive' });
+      toast({ title: 'No pudimos abrir el pago', description: mensajeParaPersona(err, 'seguimiento de pedido'), variant: 'destructive' });
       setPaying(false);
     }
   };
 
   // Fetch order from Supabase
-  useEffect(() => {
-    getOrderById(orderId).then(data => {
+  const loadOrder = useCallback(async () => {
+    setLoading(true);
+    try {
+      const data = await getOrderById(orderId);
       if (data && pickupCodeFromUrl) {
         data.pickupCode = pickupCodeFromUrl;
       }
       setOrder(data);
+      setLoadFailed(false);
+    } catch {
+      setLoadFailed(true);
+    } finally {
       setLoading(false);
-    });
+    }
   }, [orderId, pickupCodeFromUrl]);
+
+  useEffect(() => {
+    void loadOrder();
+  }, [loadOrder]);
 
   // Status tracking: orders are no longer publicly readable through Realtime
   // (RLS), so the customer page polls the get_order_public RPC instead.
@@ -87,7 +105,7 @@ export function OrderStatus({ orderId }: { orderId: string }) {
     if (!orderId) return;
     const interval = setInterval(async () => {
       if (document.visibilityState === 'hidden') return;
-      const fresh = await getOrderById(orderId);
+      const fresh = await getOrderById(orderId).catch(() => null);
       if (!fresh) return;
       setOrder(prev => {
         if (!prev || prev.status === fresh.status) return prev;
@@ -98,9 +116,9 @@ export function OrderStatus({ orderId }: { orderId: string }) {
             variant: 'default',
           });
         }
-        return { ...prev, status: fresh.status };
+        return { ...prev, status: fresh.status, paidOnline: fresh.paidOnline };
       });
-    }, 3000);
+    }, 5000);
     return () => clearInterval(interval);
   }, [orderId, toast]);
 
@@ -117,9 +135,35 @@ export function OrderStatus({ orderId }: { orderId: string }) {
 
   if (!order) {
     return (
-      <div className="text-center py-20">
-        <span className="text-6xl mb-4 block">🦍</span>
-        <p className="text-xl font-semibold">No se encontró el pedido.</p>
+      <div className="text-center py-20 space-y-4">
+        <span className="text-6xl block">🦍</span>
+        {loadFailed ? (
+          <>
+            <p className="text-xl font-semibold">No pudimos cargar tu pedido.</p>
+            <p className="text-muted-foreground text-sm">Revisa tu conexión. Tu pedido sigue registrado.</p>
+            <button
+              onClick={() => void loadOrder()}
+              className="inline-flex items-center gap-2 h-12 px-6 rounded-xl bg-primary text-primary-foreground font-bold"
+            >
+              <RefreshCw className="h-4 w-4" /> Reintentar
+            </button>
+          </>
+        ) : (
+          <p className="text-xl font-semibold">No se encontró el pedido.</p>
+        )}
+      </div>
+    );
+  }
+
+  if (order.status === 'Cancelado') {
+    return (
+      <div className="max-w-lg mx-auto space-y-6 text-center py-12">
+        <XCircle className="h-16 w-16 mx-auto text-muted-foreground" />
+        <h1 className="text-3xl font-brand tracking-wide">Pedido anulado</h1>
+        <p className="text-muted-foreground">
+          El pedido {order.shortId ? `#${order.shortId} ` : ''}de <strong>{order.nickname}</strong> se anuló
+          (por ejemplo, porque pasó más de una hora sin pago). Si crees que es un error, acércate a la caja.
+        </p>
       </div>
     );
   }
@@ -137,36 +181,36 @@ export function OrderStatus({ orderId }: { orderId: string }) {
       case 'cash':
         return (
           <div className="bg-amber-500/10 border-2 border-amber-500/30 p-6 rounded-2xl text-center space-y-4">
-            <div className="w-16 h-16 bg-amber-500/20 text-amber-600 rounded-full flex items-center justify-center mx-auto">
+            <div className="w-16 h-16 bg-amber-500/20 text-amber-800 rounded-full flex items-center justify-center mx-auto">
               <Banknote className="w-8 h-8" />
             </div>
-            <h3 className="text-xl font-bold text-amber-600">Falta el Pago en Efectivo</h3>
+            <h3 className="text-xl font-bold text-amber-800">Falta el Pago en Efectivo</h3>
             <p className="text-muted-foreground text-sm">
-              Por favor, **dirígete a la caja** con tu código de retiro para pagar {formatCLP(order.total)}. Empezaremos a cocinar en cuanto confirmemos el pago.
+              Por favor, <strong>dirígete a la caja</strong> con tu código de retiro para pagar {formatCLP(order.total)}. Empezaremos a cocinar en cuanto confirmemos el pago.
             </p>
           </div>
         );
       case 'card':
         return (
           <div className="bg-blue-500/10 border-2 border-blue-500/30 p-6 rounded-2xl text-center space-y-4">
-            <div className="w-16 h-16 bg-blue-500/20 text-blue-600 rounded-full flex items-center justify-center mx-auto">
+            <div className="w-16 h-16 bg-blue-500/20 text-blue-800 rounded-full flex items-center justify-center mx-auto">
               <CreditCard className="w-8 h-8" />
             </div>
-            <h3 className="text-xl font-bold text-blue-600">Falta el Pago con Tarjeta</h3>
+            <h3 className="text-xl font-bold text-blue-800">Falta el Pago con Tarjeta</h3>
             <p className="text-muted-foreground text-sm">
-              Por favor, **dirígete a la caja** con tu código de retiro para acercar tu tarjeta y abonar {formatCLP(order.total)}. Empezaremos a cocinar en cuanto pagues.
+              Por favor, <strong>dirígete a la caja</strong> con tu código de retiro para acercar tu tarjeta y abonar {formatCLP(order.total)}. Empezaremos a cocinar en cuanto pagues.
             </p>
           </div>
         );
       case 'transfer':
         return (
           <div className="bg-accent/10 border-2 border-accent/30 p-6 rounded-2xl text-center space-y-4">
-            <div className="w-16 h-16 bg-accent/20 text-accent rounded-full flex items-center justify-center mx-auto">
+            <div className="w-16 h-16 bg-accent/30 text-foreground rounded-full flex items-center justify-center mx-auto">
               <ArrowRight className="w-8 h-8" />
             </div>
-            <h3 className="text-xl font-bold text-accent">Paga mediante Transferencia</h3>
+            <h3 className="text-xl font-bold text-foreground">Paga mediante Transferencia</h3>
             <p className="text-muted-foreground text-sm">
-              Transfiere **{formatCLP(order.total)}** a la cuenta del local y **muestra el comprobante en caja** para que empecemos a cocinar.
+              Transfiere <strong>{formatCLP(order.total)}</strong> a la cuenta del local y <strong>muestra el comprobante en caja</strong> para que empecemos a cocinar.
             </p>
             {order.transferDetails?.bank ? (
               <div className="bg-background/80 rounded-xl p-5 text-left mt-4 text-sm font-medium border border-border shadow-sm space-y-2">
@@ -292,7 +336,7 @@ export function OrderStatus({ orderId }: { orderId: string }) {
               const isLast = index === statusSteps.length - 1;
               return (
                 <div key={step} className="flex items-center flex-1 min-w-0">
-                  <div className="flex flex-col items-center gap-1.5 shrink-0 w-12">
+                  <div className="flex flex-col items-center gap-1.5 shrink-0 w-14">
                     <div className={`w-9 h-9 rounded-full flex items-center justify-center border-2 transition-all duration-500 z-10 ${
                       isCurrent
                         ? 'bg-primary border-primary text-primary-foreground scale-110 shadow-lg'
@@ -302,7 +346,7 @@ export function OrderStatus({ orderId }: { orderId: string }) {
                     }`}>
                       <StepIcon className="w-4 h-4" />
                     </div>
-                    <span className={`text-[9px] font-bold text-center leading-tight px-0.5 ${
+                    <span className={`text-xs font-bold text-center leading-tight px-0.5 ${
                       isActive ? 'text-primary' : 'text-muted-foreground'
                     }`}>
                       {step}

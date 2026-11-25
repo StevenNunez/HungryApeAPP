@@ -37,7 +37,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-.genkit/*
+
 .env*
 .claude
 .agent  
@@ -61,3 +61,6 @@ public/Sin título.png
 
 # Scripts de demo/desarrollo (no van al deploy)
 scripts/
+
+# Ayudantes locales (sesión demo, consultas de esquema): nunca al repo
+.local/

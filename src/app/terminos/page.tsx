@@ -66,10 +66,10 @@ export default function TerminosPage() {
               El Servicio se ofrece en los siguientes planes:
             </p>
             <ul className="list-disc list-inside space-y-1 text-muted-foreground ml-2">
-              <li><strong className="text-foreground">Básico</strong> — suscripción mensual o anual, menú digital, QR y cocina en tiempo real.</li>
+              <li><strong className="text-foreground">Básico</strong> — suscripción mensual o anual, menú digital con hasta 15 productos, QR y cocina en tiempo real, hasta 40 pedidos por día. Al terminar la prueba de 14 días, si no hay un plan activo, el menú sigue visible pero no recibe pedidos por la app hasta activarlo.</li>
               <li><strong className="text-foreground">Starter</strong> — suscripción mensual o anual, funcionalidades de inventario y analíticas básicas.</li>
-              <li><strong className="text-foreground">Pro</strong> — suscripción mensual o anual, incluye pagos online, WhatsApp y reportes avanzados.</li>
-              <li><strong className="text-foreground">Enterprise</strong> — suscripción mensual o anual, incluye multi-sucursales y control de insumos y costos.</li>
+              <li><strong className="text-foreground">Pro</strong> — suscripción mensual o anual, incluye pagos online, avisos por WhatsApp, control de insumos por receta y reportes avanzados.</li>
+              <li><strong className="text-foreground">Enterprise</strong> — suscripción mensual o anual, incluye equipo con roles (encargados y cocina con cuenta propia); el soporte multi-sucursales está en desarrollo y se avisará al estar disponible.</li>
             </ul>
             <p className="mt-3">
               Los precios están expresados en Pesos Chilenos (CLP) e incluyen el IVA correspondiente cuando aplique. Hungry Ape se reserva el derecho de modificar los precios con 30 días de aviso previo. Las suscripciones en curso se mantienen al precio contratado hasta su renovación.
