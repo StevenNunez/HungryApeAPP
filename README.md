@@ -52,7 +52,7 @@ Cada local tiene su propia dirección (`/m/mi-food-truck`), su menú, su cocina,
 | **Inventario y reportes** | Stock con alertas de nivel bajo, ventas brutas, ventas por día (con rango: hoy, 7 y 30 días, todo) y por método de pago. |
 | **Rentabilidad** *(Pro)* | Costo por producto, margen total y por producto, y cuántas de tus ventas ya tienen costo cargado. El costo queda "congelado" en cada venta: editarlo después no altera el margen histórico. |
 | **Tiempos de preparación** *(Pro)* | Preparación promedio, espera del cliente desde que paga y promedio por producto. |
-| **Insumos por receta** *(Pro)* | Cada producto tiene su receta (1 pan, 1 vienesa, 60 g de palta…) y cada opción puede sumar o restar ("Extra palta", "Sin tomate"). Cuando un pedido se paga se descuentan los insumos y si se anula vuelven. El stock de cada producto sale de sus insumos, así que cuando se acaba el pan los completos se agotan solos en el menú. Compras, mermas, conteos, lista de compras, aviso de "al ritmo de hoy se acaba a las…" y costo real por receta. |
+| **Insumos por receta** *(Pro)* | Cada producto tiene su receta (1 pan, 1 vienesa, 60 g de palta…) y cada opción puede sumar o restar ("Extra palta", "Sin tomate"). Cuando un pedido se paga se descuentan los insumos y si se anula vuelven. El stock de cada producto sale de sus insumos, así que cuando se acaba el pan los completos se agotan solos en el menú. Compras (en unidades, kilos o cajas), mermas, conteos, historial de precios, lista de compras, aviso de "al ritmo de hoy se acaba a las…", correo al dueño cuando un insumo baja del mínimo y costo real por receta. |
 | **Reposición** *(Pro)* | Para cada producto con stock bajo: cuánto comprar hasta su stock objetivo y cuánto costaría. |
 | **Exportar** *(Pro)* | Reportes en Excel y PDF, generados en el navegador. |
 | **Pagos online** *(Pro)* | Cada local conecta su propia cuenta de Mercado Pago; el cliente paga ahí, el pedido pasa solo a cocina y el dinero llega directo al local. |
@@ -205,6 +205,7 @@ Ambos exigen `CRON_SECRET`: si la variable no existe, se niegan a ejecutar. En M
 - El costo de cada producto vive en una tabla aparte que solo ve el dueño: nunca viaja al menú público ni por tiempo real.
 - Las fotos solo se pueden subir, cambiar o borrar en la carpeta del propio local.
 - Roles por local (dueño, encargado, cocina) aplicados en la base de datos, no solo en la pantalla. Las invitaciones viajan con un enlace privado que vence en 7 días, solo se guarda su huella y únicamente se acepta con el mismo correo invitado.
+- Límite de intentos compartido entre servidores (en la base de datos) para lo que puede abusarse: sugerir apodos con IA, reportar errores, invitar, iniciar pagos.
 - Registro de errores: lo que falla en el servidor o en pantalla queda agrupado en la tabla `errores` y el primer caso de cada error nuevo llega por correo a Teo Labs.
 
 ---

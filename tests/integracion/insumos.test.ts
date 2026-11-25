@@ -87,6 +87,27 @@ describe.skipIf(!ready)('insumos por receta (base real, demo Pro)', () => {
     expect((await productStock()).stock).toBe(5);
   });
 
+  it('dos productos que comparten insumo no pueden pedir más de lo que hay', async ctx => {
+    if (!has021) return ctx.skip();
+    // Second product using the same bread; only 1 bread left
+    const { data: p2 } = await service.from('products').insert({
+      tenant_id: tenantId, name: '[prueba] Salchipapa de prueba', description: '', price: 1000, category: 'Pruebas', stock: 0, is_available: false,
+    }).select('id').single();
+    await service.from('product_recipes').insert({ tenant_id: tenantId, product_id: p2!.id, supply_id: supplyId, quantity: 1 });
+    await service.from('supplies').update({ stock: 1 }).eq('id', supplyId);
+    await service.rpc('refresh_recipe_stock', { p_tenant_id: tenantId });
+
+    const { error } = await anon.rpc('create_order', {
+      p_tenant_slug: SLUG, p_nickname: 'Prueba compartido', p_payment_method: 'cash', p_order_type: 'aqui',
+      p_items: [{ product_id: productId, quantity: 1, option_ids: [] }, { product_id: p2!.id, quantity: 1, option_ids: [] }],
+    });
+    expect(error?.message).toMatch(/OUT_OF_STOCK/);
+
+    await service.from('product_recipes').delete().eq('product_id', p2!.id);
+    await service.from('products').update({ is_archived: true, is_available: false }).eq('id', p2!.id);
+    await service.from('supplies').update({ stock: 5 }).eq('id', supplyId);
+  });
+
   it('cuando se acaba el insumo, el producto se agota solo', async ctx => {
     if (!has021) return ctx.skip();
     await service.from('supplies').update({ stock: 0 }).eq('id', supplyId);

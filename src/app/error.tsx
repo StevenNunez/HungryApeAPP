@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import { useEffect } from 'react';
 import { reportarError } from '@/lib/errores';
 
@@ -51,21 +52,21 @@ export default function ErrorDePagina({ error, reset }: { error: Error & { diges
             : 'Puede ser algo pasajero. Reintenta y, si sigue igual, recarga la página. Ya quedó registrado.'}
         </p>
         <div className="mt-5 flex flex-col gap-2">
-          <button
+          <Button
             type="button"
             onClick={() => window.location.reload()}
-            className="h-12 rounded-2xl bg-primary px-5 font-bold text-primary-foreground hover:bg-primary/90"
+            className="h-12 rounded-2xl px-5 font-bold"
           >
             Recargar
-          </button>
+          </Button>
           {!vieja && (
-            <button
+            <Button variant="outline"
               type="button"
               onClick={() => reset()}
-              className="h-12 rounded-2xl border-2 border-border px-5 font-semibold hover:border-primary"
+              className="h-12 rounded-2xl border-2 px-5 font-semibold"
             >
               Reintentar
-            </button>
+            </Button>
           )}
         </div>
       </div>

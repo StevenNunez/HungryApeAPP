@@ -10,6 +10,8 @@ export interface TenantMenu {
   tenant: { id: string; name: string; description: string | null; logoUrl: string | null };
   /** False after the trial when no plan was activated: the menu shows, orders pause. */
   ordersOpen: boolean;
+  /** For the cart's payment methods, sent with the menu so they don't pop in late. */
+  payment: { plan: string; online: boolean };
   items: MenuItem[];
   groups: Record<string, ModifierGroup[]>;
 }
@@ -27,7 +29,7 @@ async function fetchTenantMenu(slug: string): Promise<TenantMenu | null> {
 
   const { data: tenant } = await supabase
     .from('tenants_public')
-    .select('id, name, description, logo_url, effective_plan')
+    .select('id, name, description, logo_url, effective_plan, online_payments')
     .eq('slug', slug)
     .maybeSingle();
   if (!tenant) return null;
@@ -58,6 +60,7 @@ async function fetchTenantMenu(slug: string): Promise<TenantMenu | null> {
 
   return {
     ordersOpen: tenant.id === DEMO_TENANT_ID || canTakeOrders((tenant as any).effective_plan),
+    payment: { plan: (tenant as any).effective_plan ?? 'gratis', online: !!(tenant as any).online_payments },
     tenant: {
       id: tenant.id,
       name: tenant.name,

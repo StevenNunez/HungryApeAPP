@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { sendWelcomeEmail } from '@/lib/email';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit';
 
 /**
  * POST /api/email/welcome
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     }
 
     // One welcome per user per hour is plenty
-    if (!rateLimit(`welcome:${user.id}`, 1, 60 * 60 * 1000)) {
+    if (!(await rateLimitShared(`welcome:${user.id}`, 1, 60 * 60 * 1000))) {
       return NextResponse.json({ ok: true, skipped: true });
     }
 

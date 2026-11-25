@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServiceSupabaseClient } from '@/lib/supabase/server';
 import { appBaseUrl, createOrderPreference, getSellerAccessToken, isMarketplaceConfigured } from '@/lib/mp-seller';
-import { clientIp, rateLimit } from '@/lib/rate-limit';
+import { clientIp, rateLimitShared } from '@/lib/rate-limit';
 import { anotarError } from '@/lib/errores-servidor';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (!UUID_RE.test(id)) return NextResponse.json({ error: 'Pedido inválido' }, { status: 400 });
   if (!isMarketplaceConfigured()) return NextResponse.json({ error: 'Pagos online no disponibles' }, { status: 503 });
 
-  if (!rateLimit(`order-pay:${clientIp(request.headers)}`, 15, 10 * 60 * 1000)) {
+  if (!(await rateLimitShared(`order-pay:${clientIp(request.headers)}`, 15, 10 * 60 * 1000))) {
     return NextResponse.json({ error: 'Demasiados intentos, espera un momento' }, { status: 429 });
   }
 

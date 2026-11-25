@@ -7,8 +7,9 @@ import { useTenant } from '@/hooks/useTenant';
 import { fetchInventory, fetchReportData } from '@/lib/reportes-data';
 import { InventoryTab } from '@/components/reportes/InventoryTab';
 import { LOW_STOCK_THRESHOLD, ProLock, RangePicker, ExportButtons } from '@/components/reportes/parts';
-import { ArrowLeft, TrendingUp, CreditCard, ShoppingBag, Award, LockKeyhole, Percent, Timer } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { SalesTab, ProfitTab, PrepTab } from '@/components/reportes/ReportTabs';
+import { ArrowLeft, LockKeyhole } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import Link from 'next/link';
@@ -18,13 +19,8 @@ import { getEffectivePlan } from '@/lib/data';
 import { isProPlan, canUseReports } from '@/lib/plans';
 import { RANGE_LABELS, computeProfitability, computePrepTimes, computeRestockAlerts, salesByDay as buildSalesByDay, formatMinutes, type ReportRange } from '@/lib/analytics';
 import { exportExcel, exportPdf, type ReportTable } from '@/lib/export';
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
-  ResponsiveContainer, PieChart, Pie, Cell
-} from 'recharts';
 import { mensajeParaPersona } from '@/lib/errores';
 
-const COLORS = ['#ef4444', '#3b82f6', '#f59e0b', '#10b981', '#8b5cf6'];
 const PAY_LABELS: Record<string, string> = {
   cash: 'Efectivo', transfer: 'Transferencia', card: 'Tarjeta', qr: 'QR/App', online: 'Pago online',
 };
@@ -260,6 +256,14 @@ export default function InventarioReportesPage() {
     </Card>
   );
 
+  // Range + export, shared by the report tabs
+  const toolbar = (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <RangePicker range={range} onChange={setRange} loading={reportLoading} />
+      <ExportButtons isPro={isPro} exporting={exporting} onExport={handleExport} />
+    </div>
+  );
+
   const tabClass = 'rounded-xl px-6 font-semibold data-[state=active]:bg-background data-[state=active]:shadow-sm';
 
   return (
@@ -291,283 +295,28 @@ export default function InventarioReportesPage() {
             <InventoryTab products={products} setProducts={setProducts} restock={restock} isPro={isPro} />
           </TabsContent>
 
-          {/* Selector de rango + exportación (compartido por las pestañas de reportes) */}
-          {/* ═══════════════════════════ REPORTES TAB ═══════════════════════════ */}
-          <TabsContent value="reportes">
-            <div className="space-y-8">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <RangePicker range={range} onChange={setRange} loading={reportLoading} />
-                <ExportButtons isPro={isPro} exporting={exporting} onExport={handleExport} />
-              </div>
-
-              {/* KPIS */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="border-border hover:border-primary/20 transition-all shadow-md">
-                  <CardContent className="pt-6 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-1">Ventas Brutas</p>
-                      <h3 className="text-3xl font-brand tracking-tighter text-foreground">{formatCLP(totalSales)}</h3>
-                    </div>
-                    <div className="h-12 w-12 bg-green-500/10 text-green-800 rounded-2xl flex items-center justify-center">
-                      <TrendingUp className="h-6 w-6" />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-border hover:border-primary/20 transition-all shadow-md">
-                  <CardContent className="pt-6 flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-1">Pedidos</p>
-                      <h3 className="text-3xl font-brand tracking-tighter text-foreground">
-                        {totalOrders} <span className="text-sm font-normal text-muted-foreground lowercase">completados</span>
-                      </h3>
-                    </div>
-                    <div className="h-12 w-12 bg-blue-500/10 text-blue-800 rounded-2xl flex items-center justify-center">
-                      <ShoppingBag className="h-6 w-6" />
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-border hover:border-accent/40 shadow-[0_0_20px_-5px_rgba(250,204,21,0.2)] transition-all">
-                  <CardContent className="pt-6 flex items-start justify-between">
-                    <div className="truncate pr-4">
-                      <p className="text-sm font-bold text-accent uppercase tracking-widest mb-1">Producto Estrella 🏆</p>
-                      <h3 className="text-xl font-bold truncate">{topProduct.name}</h3>
-                      <p className="text-xs text-muted-foreground mt-1">{topProduct.qty} unidades vendidas</p>
-                    </div>
-                    <div className="h-12 w-12 shrink-0 bg-accent/20 text-accent-foreground rounded-2xl flex items-center justify-center rotate-12">
-                      <Award className="h-6 w-6" />
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Charts */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                <Card className="border-border shadow-md">
-                  <CardHeader>
-                    <CardTitle className="font-brand uppercase tracking-wider">Ventas por Día</CardTitle>
-                    <CardDescription>{RANGE_LABELS[range]}.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-[300px] w-full">
-                      {salesByDay.length > 0 ? (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={salesByDay} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#333" opacity={0.2} />
-                            <XAxis dataKey="name" tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
-                            <YAxis tickFormatter={(val) => `$${val / 1000}k`} tick={{ fontSize: 12 }} tickLine={false} axisLine={false} />
-                            <RechartsTooltip
-                              cursor={{ fill: 'rgba(200,200,200,0.1)' }}
-                              contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }}
-                              formatter={(value: any) => [formatCLP(value), 'Ventas']}
-                            />
-                            <Bar dataKey="total" fill="#ef4444" radius={[6, 6, 0, 0]} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      ) : (
-                        <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
-                          No hay datos suficientes para graficar.
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="border-border shadow-md">
-                  <CardHeader>
-                    <CardTitle className="font-brand uppercase tracking-wider flex items-center gap-2">
-                      <CreditCard className="h-5 w-5 text-muted-foreground" />
-                      Métodos de Pago
-                    </CardTitle>
-                    <CardDescription>Cómo prefieren pagar tus clientes.</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="h-[300px] w-full">
-                      {payMethods.length > 0 ? (
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie data={payMethods} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={5} dataKey="value">
-                              {payMethods.map((_, index) => (
-                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                              ))}
-                            </Pie>
-                            <RechartsTooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      ) : (
-                        <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
-                          No hay suficientes cobros procesados.
-                        </div>
-                      )}
-                    </div>
-                    {payMethods.length > 0 && (
-                      <div className="flex flex-wrap justify-center gap-4 mt-2">
-                        {payMethods.map((pm, i) => (
-                          <div key={pm.name} className="flex items-center gap-2 text-sm font-medium">
-                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[i % COLORS.length] }} />
-                            {pm.name} ({pm.value})
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
+          <TabsContent value="reportes" className="space-y-8">
+            {toolbar}
+            <SalesTab
+              totalSales={totalSales}
+              totalOrders={totalOrders}
+              topProduct={topProduct}
+              salesByDay={salesByDay}
+              payMethods={payMethods}
+              rangeLabel={RANGE_LABELS[range]}
+            />
           </TabsContent>
 
-          {/* ═══════════════════════════ RENTABILIDAD TAB (Pro) ═══════════════════════════ */}
-          <TabsContent value="rentabilidad">
+          <TabsContent value="rentabilidad" className="space-y-6">
             {!isPro ? (
-              <ProLock feature="Carga el costo de cada producto y mira cuánto ganas realmente: margen por producto, margen total y cuáles te dejan más plata." />
-            ) : (
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <RangePicker range={range} onChange={setRange} loading={reportLoading} />
-                  <ExportButtons isPro={isPro} exporting={exporting} onExport={handleExport} />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <Card className="border-border shadow-md">
-                    <CardContent className="pt-6">
-                      <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-1">Margen</p>
-                      <h3 className="text-3xl font-brand tracking-tighter">{formatCLP(profit.margin)}</h3>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {profit.marginPct === null ? 'Carga costos para calcularlo' : `${profit.marginPct.toFixed(1)}% sobre lo vendido con costo`}
-                      </p>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-border shadow-md">
-                    <CardContent className="pt-6">
-                      <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-1">Costo de lo vendido</p>
-                      <h3 className="text-3xl font-brand tracking-tighter">{formatCLP(profit.cost)}</h3>
-                      <p className="text-xs text-muted-foreground mt-1">Ventas totales: {formatCLP(profit.revenue)}</p>
-                    </CardContent>
-                  </Card>
-                  <Card className={`shadow-md ${profit.coveragePct < 80 ? 'border-amber-500/40' : 'border-border'}`}>
-                    <CardContent className="pt-6 flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-1">Ventas con costo</p>
-                        <h3 className="text-3xl font-brand tracking-tighter">{profit.coveragePct.toFixed(0)}%</h3>
-                        {profit.coveragePct < 100 && (
-                          <p className="text-xs text-amber-800 mt-1">
-                            Carga el costo en <Link href="/dashboard/menu" className="underline">Mi Menú</Link> para medir todo.
-                          </p>
-                        )}
-                      </div>
-                      <Percent className="h-8 w-8 text-muted-foreground opacity-60" />
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <Card className="border-border overflow-hidden">
-                  <CardHeader className="border-b border-border">
-                    <CardTitle className="font-brand uppercase tracking-wider text-xl">Margen por producto</CardTitle>
-                    <CardDescription>
-                      Usa el costo vigente cuando se vendió. Los extras pagados (salsas, agregados) suman a la venta, pero no llevan costo.
-                    </CardDescription>
-                  </CardHeader>
-                  {profit.rows.length === 0 ? (
-                    <CardContent className="py-12 text-center text-sm text-muted-foreground">No hay ventas en este período.</CardContent>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
-                          <tr>
-                            <th className="text-left px-5 py-3">Producto</th>
-                            <th className="text-right px-3 py-3">Uds.</th>
-                            <th className="text-right px-3 py-3">Ventas</th>
-                            <th className="text-right px-3 py-3">Costo</th>
-                            <th className="text-right px-3 py-3">Margen</th>
-                            <th className="text-right px-5 py-3">%</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                          {profit.rows.map(r => (
-                            <tr key={r.key} className="hover:bg-muted/30">
-                              <td className="px-5 py-3 font-medium">{r.name}{!r.complete && <span className="ml-2 text-xs text-amber-800 font-bold">SIN COSTO</span>}</td>
-                              <td className="text-right px-3 py-3">{r.units}</td>
-                              <td className="text-right px-3 py-3">{formatCLP(r.revenue)}</td>
-                              <td className="text-right px-3 py-3">{formatCLP(r.cost)}</td>
-                              <td className="text-right px-3 py-3 font-bold">{formatCLP(r.margin)}</td>
-                              <td className={`text-right px-5 py-3 font-bold ${r.marginPct !== null && r.marginPct < 30 ? 'text-red-700' : 'text-green-800'}`}>
-                                {r.marginPct === null ? '—' : `${r.marginPct.toFixed(0)}%`}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </Card>
-              </div>
-            )}
+              <ProLock feature="Mira cuánto ganas realmente: margen por producto, margen total y cuáles te dejan más plata." />
+            ) : (<>{toolbar}<ProfitTab profit={profit} /></>)}
           </TabsContent>
 
-          {/* ═══════════════════════════ TIEMPOS TAB (Pro) ═══════════════════════════ */}
-          <TabsContent value="tiempos">
+          <TabsContent value="tiempos" className="space-y-6">
             {!isPro ? (
               <ProLock feature="Mide cuánto demora tu cocina: tiempo de preparación promedio y por producto, y cuánto espera el cliente desde que paga." />
-            ) : (
-              <div className="space-y-6">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <RangePicker range={range} onChange={setRange} loading={reportLoading} />
-                  <ExportButtons isPro={isPro} exporting={exporting} onExport={handleExport} />
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                  <Card className="border-border shadow-md">
-                    <CardContent className="pt-6 flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-1">Preparación promedio</p>
-                        <h3 className="text-3xl font-brand tracking-tighter">{formatMinutes(prep.avgPrepMin)}</h3>
-                        <p className="text-xs text-muted-foreground mt-1">De &quot;En preparación&quot; a &quot;Listo&quot;</p>
-                      </div>
-                      <Timer className="h-8 w-8 text-muted-foreground opacity-60" />
-                    </CardContent>
-                  </Card>
-                  <Card className="border-border shadow-md">
-                    <CardContent className="pt-6">
-                      <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-1">Espera del cliente</p>
-                      <h3 className="text-3xl font-brand tracking-tighter">{formatMinutes(prep.avgWaitMin)}</h3>
-                      <p className="text-xs text-muted-foreground mt-1">Del pago confirmado a &quot;Listo&quot;</p>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-border shadow-md">
-                    <CardContent className="pt-6">
-                      <p className="text-sm font-bold text-muted-foreground uppercase tracking-widest mb-1">Pedidos medidos</p>
-                      <h3 className="text-3xl font-brand tracking-tighter">{prep.measuredOrders}</h3>
-                      <p className="text-xs text-muted-foreground mt-1">Solo cuentan los pedidos desde que se activó esta función.</p>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <Card className="border-border overflow-hidden">
-                  <CardHeader className="border-b border-border">
-                    <CardTitle className="font-brand uppercase tracking-wider text-xl">Por producto</CardTitle>
-                    <CardDescription>
-                      Promedio de los pedidos que incluyen el producto (un ticket se prepara completo, así que en pedidos mixtos es una aproximación).
-                    </CardDescription>
-                  </CardHeader>
-                  {prep.perProduct.length === 0 ? (
-                    <CardContent className="py-12 text-center text-sm text-muted-foreground">
-                      Aún no hay pedidos con tiempos medidos. Se registran al pasar los pedidos por &quot;En preparación&quot; y &quot;Listo&quot; en la cocina.
-                    </CardContent>
-                  ) : (
-                    <div className="divide-y divide-border">
-                      {prep.perProduct.map(p => (
-                        <div key={p.name} className="flex items-center justify-between px-5 py-3 text-sm">
-                          <span className="font-medium truncate pr-3">{p.name}</span>
-                          <span className="text-muted-foreground shrink-0 mr-6">{p.orders} pedido{p.orders !== 1 ? 's' : ''}</span>
-                          <span className="font-bold shrink-0 w-20 text-right">{formatMinutes(p.avgPrepMin)}</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </Card>
-              </div>
-            )}
+            ) : (<>{toolbar}<PrepTab prep={prep} /></>)}
           </TabsContent>
         </Tabs>
       )}

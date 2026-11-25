@@ -3,6 +3,7 @@ import { createServiceSupabaseClient } from '@/lib/supabase/server';
 import { fetchSellerPayment, getSellerAccessToken } from '@/lib/mp-seller';
 import { verifyMercadoPagoSignature } from '@/lib/mp-signature';
 import { anotarError } from '@/lib/errores-servidor';
+import { notifyLowSupplies } from '@/lib/supply-alerts';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -71,6 +72,8 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`✅ Order ${order.id} paid online`);
+    // Paying moved it to the kitchen, which deducted supplies: warn the owner if some ran low
+    await notifyLowSupplies(order.tenant_id);
     return NextResponse.json({ received: true });
   } catch (err: any) {
     // 500 → Mercado Pago retries (the update above is idempotent)

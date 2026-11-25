@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { anotarError } from '@/lib/errores-servidor';
-import { rateLimit, clientIp } from '@/lib/rate-limit';
+import { rateLimitShared, clientIp } from '@/lib/rate-limit';
 
 /**
  * POST /api/errores — los errores que ve una persona en pantalla (src/lib/errores.ts)
@@ -32,7 +32,7 @@ async function quienEs(pedido: Request) {
 }
 
 export async function POST(pedido: Request) {
-  if (!rateLimit(`errores:${clientIp(pedido.headers)}`, 30, 60_000)) {
+  if (!(await rateLimitShared(`errores:${clientIp(pedido.headers)}`, 30, 60_000))) {
     return new Response(null, { status: 429 });
   }
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceSupabaseClient } from '@/lib/supabase/server';
 import { buildWhatsAppLink, isWhatsAppConfigured, newLinkToken } from '@/lib/whatsapp';
 import { notificationsAllowed } from '@/lib/notify';
-import { clientIp, rateLimit } from '@/lib/rate-limit';
+import { clientIp, rateLimitShared } from '@/lib/rate-limit';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
   if (!isWhatsAppConfigured()) {
     return NextResponse.json({ error: 'WhatsApp no está disponible' }, { status: 503 });
   }
-  if (!rateLimit(`wa-link:${clientIp(request.headers)}`, 10, 10 * 60 * 1000)) {
+  if (!(await rateLimitShared(`wa-link:${clientIp(request.headers)}`, 10, 10 * 60 * 1000))) {
     return NextResponse.json({ error: 'Demasiados intentos, espera un momento' }, { status: 429 });
   }
 

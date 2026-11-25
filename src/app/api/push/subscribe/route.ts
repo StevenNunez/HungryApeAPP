@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServiceSupabaseClient } from '@/lib/supabase/server';
 import { isAllowedPushEndpoint, isPushConfigured } from '@/lib/push';
 import { notificationsAllowed } from '@/lib/notify';
-import { clientIp, rateLimit } from '@/lib/rate-limit';
+import { clientIp, rateLimitShared } from '@/lib/rate-limit';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_SUBS_PER_ORDER = 3;
@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
   if (!isPushConfigured()) {
     return NextResponse.json({ error: 'Las notificaciones no están disponibles' }, { status: 503 });
   }
-  if (!rateLimit(`push-sub:${clientIp(request.headers)}`, 10, 10 * 60 * 1000)) {
+  if (!(await rateLimitShared(`push-sub:${clientIp(request.headers)}`, 10, 10 * 60 * 1000))) {
     return NextResponse.json({ error: 'Demasiados intentos, espera un momento' }, { status: 429 });
   }
 

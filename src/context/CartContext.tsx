@@ -13,6 +13,9 @@ interface CartContextType {
   /** False when the business has no active plan: the menu shows, ordering pauses. */
   ordersOpen: boolean;
   setOrdersOpen: (open: boolean) => void;
+  /** Plan and online payments of the business, provided by the menu page (server data). */
+  payment: { plan: string; online: boolean } | null;
+  setPayment: (p: { plan: string; online: boolean } | null) => void;
 }
 
 export const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -32,6 +35,7 @@ function buildCartKey(itemId: string, modifiers: SelectedModifier[]): string {
 export function CartProvider({ children, storageKey }: { children: ReactNode; storageKey?: string }) {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [ordersOpen, setOrdersOpen] = useState(true);
+  const [payment, setPayment] = useState<{ plan: string; online: boolean } | null>(null);
   const hydrated = useRef(false);
 
   useEffect(() => {
@@ -98,8 +102,8 @@ export function CartProvider({ children, storageKey }: { children: ReactNode; st
   );
 
   const value = useMemo(
-    () => ({ cartItems, addToCart, removeFromCart, updateQuantity, clearCart, cartTotal, ordersOpen, setOrdersOpen }),
-    [cartItems, cartTotal, ordersOpen]
+    () => ({ cartItems, addToCart, removeFromCart, updateQuantity, clearCart, cartTotal, ordersOpen, setOrdersOpen, payment, setPayment }),
+    [cartItems, cartTotal, ordersOpen, payment]
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

@@ -29,10 +29,29 @@ CREATE TABLE IF NOT EXISTS public.supplies (
   target_stock  NUMERIC(12,2) CHECK (target_stock IS NULL OR target_stock >= 0),
   cost_per_unit NUMERIC(12,4) CHECK (cost_per_unit IS NULL OR cost_per_unit >= 0),
   is_archived   BOOLEAN NOT NULL DEFAULT false,
+  low_alert_sent_at TIMESTAMPTZ,              -- aviso por correo de "quedan pocos" (uno por bajada)
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE public.supplies ADD COLUMN IF NOT EXISTS low_alert_sent_at TIMESTAMPTZ;
 CREATE INDEX IF NOT EXISTS idx_supplies_tenant ON public.supplies (tenant_id) WHERE NOT is_archived;
+
+-- Al reponer por encima del mínimo, el aviso se rearma para la próxima bajada
+CREATE OR REPLACE FUNCTION public.rearm_supply_alert()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW.stock > NEW.min_stock AND NEW.low_alert_sent_at IS NOT NULL THEN
+    NEW.low_alert_sent_at := NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS trg_rearm_supply_alert ON public.supplies;
+CREATE TRIGGER trg_rearm_supply_alert
+  BEFORE UPDATE OF stock, min_stock ON public.supplies
+  FOR EACH ROW EXECUTE FUNCTION public.rearm_supply_alert();
 CREATE UNIQUE INDEX IF NOT EXISTS supplies_unique_name ON public.supplies (tenant_id, lower(name)) WHERE NOT is_archived;
 
 CREATE TABLE IF NOT EXISTS public.product_recipes (
@@ -410,6 +429,26 @@ $$;
 REVOKE ALL ON FUNCTION public.refresh_my_recipe_stock() FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.refresh_my_recipe_stock() TO authenticated;
 
+-- ── 5b. Avisos de insumo bajo ────────────────────────────────────────────────
+-- El servidor la llama después de confirmar un pago: devuelve los insumos que
+-- acaban de quedar en o bajo su mínimo y los marca, para avisar una sola vez.
+CREATE OR REPLACE FUNCTION public.take_low_supply_alerts(p_tenant_id UUID)
+RETURNS TABLE (name TEXT, unit TEXT, stock NUMERIC, min_stock NUMERIC, target_stock NUMERIC)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  UPDATE public.supplies s
+     SET low_alert_sent_at = now()
+   WHERE s.tenant_id = p_tenant_id
+     AND NOT s.is_archived
+     AND s.min_stock > 0
+     AND s.stock <= s.min_stock
+     AND s.low_alert_sent_at IS NULL
+  RETURNING s.name, s.unit, s.stock, s.min_stock, s.target_stock;
+$$;
+REVOKE ALL ON FUNCTION public.take_low_supply_alerts(UUID) FROM PUBLIC, anon, authenticated;
+
 -- ── 6. create_order: pedidos en pausa sin plan, costo por receta, stock por receta ──
 CREATE OR REPLACE FUNCTION public.create_order(
   p_tenant_slug    TEXT,
@@ -436,6 +475,7 @@ DECLARE
   v_line       JSONB;
   v_prod       RECORD;
   v_cost       NUMERIC;
+  v_short_name TEXT;
   v_qty        INTEGER;
   v_opt_ids    UUID[];
   v_unit       NUMERIC;
@@ -598,6 +638,27 @@ BEGIN
   END LOOP;
 
   UPDATE public.orders SET total = v_total WHERE id = v_order_id;
+
+  -- Insumos para el pedido COMPLETO: un completo y una salchipapa comparten la
+  -- vienesa, y revisar producto por producto podía dejar pasar uno de más.
+  IF public.plan_rank(v_plan) >= public.plan_rank('pro') THEN
+    SELECT s.name INTO v_short_name
+      FROM public.order_supply_usage(v_order_id) u
+      JOIN public.supplies s ON s.id = u.supply_id
+      LEFT JOIN LATERAL (
+        SELECT coalesce(sum(ou.quantity), 0) AS qty
+          FROM public.orders o
+          CROSS JOIN LATERAL public.order_supply_usage(o.id) ou
+         WHERE o.tenant_id = v_tenant.id AND o.status = 'Por Pagar'
+           AND o.supplies_deducted_at IS NULL AND o.id <> v_order_id
+           AND ou.supply_id = u.supply_id
+      ) other ON true
+     WHERE s.stock - other.qty < u.quantity
+     LIMIT 1;
+    IF v_short_name IS NOT NULL THEN
+      RAISE EXCEPTION 'OUT_OF_STOCK: %', v_short_name;
+    END IF;
+  END IF;
 
   -- Productos con receta: su stock se recalcula con lo que este pedido deja reservado
   PERFORM public.refresh_recipe_stock(v_tenant.id);

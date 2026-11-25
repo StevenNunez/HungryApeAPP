@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import type { Order, OrderStatus as OrderStatusType } from '@/lib/types';
@@ -141,12 +142,12 @@ export function OrderStatus({ orderId }: { orderId: string }) {
           <>
             <p className="text-xl font-semibold">No pudimos cargar tu pedido.</p>
             <p className="text-muted-foreground text-sm">Revisa tu conexión. Tu pedido sigue registrado.</p>
-            <button
+            <Button
               onClick={() => void loadOrder()}
-              className="inline-flex items-center gap-2 h-12 px-6 rounded-xl bg-primary text-primary-foreground font-bold"
+              className="h-12 px-6 rounded-xl font-bold gap-2"
             >
               <RefreshCw className="h-4 w-4" /> Reintentar
-            </button>
+            </Button>
           </>
         ) : (
           <p className="text-xl font-semibold">No se encontró el pedido.</p>
@@ -254,13 +255,13 @@ export function OrderStatus({ orderId }: { orderId: string }) {
             <p className="text-muted-foreground text-sm">
               Paga <strong>{formatCLP(order.total)}</strong> con tarjeta o Mercado Pago. Tu pedido pasa a cocina apenas se confirme el pago.
             </p>
-            <button
+            <Button
               onClick={payOnline}
               disabled={paying}
-              className="w-full h-12 rounded-xl bg-primary text-primary-foreground font-bold disabled:opacity-60"
+              className="w-full h-12 rounded-xl font-bold"
             >
               {paying ? 'Abriendo Mercado Pago...' : 'Pagar ahora'}
-            </button>
+            </Button>
           </div>
         );
       case 'qr':

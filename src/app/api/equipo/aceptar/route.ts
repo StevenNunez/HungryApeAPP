@@ -3,7 +3,7 @@ import { createServerSupabaseClient, createServiceSupabaseClient } from '@/lib/s
 import { hashInvitationToken, invitationState } from '@/lib/equipo';
 import { tenantOfUser } from '@/lib/roles-server';
 import { anotarError } from '@/lib/errores-servidor';
-import { rateLimit, clientIp } from '@/lib/rate-limit';
+import { rateLimitShared, clientIp } from '@/lib/rate-limit';
 import { canUseTeam, getEffectivePlan } from '@/lib/plans';
 
 /**
@@ -12,7 +12,7 @@ import { canUseTeam, getEffectivePlan } from '@/lib/plans';
  * joins the business with the invited role.
  */
 export async function POST(request: NextRequest) {
-  if (!rateLimit(`equipo-aceptar:${clientIp(request.headers)}`, 20, 10 * 60 * 1000)) {
+  if (!(await rateLimitShared(`equipo-aceptar:${clientIp(request.headers)}`, 20, 10 * 60 * 1000))) {
     return NextResponse.json({ error: 'Demasiados intentos. Espera unos minutos.' }, { status: 429 });
   }
 

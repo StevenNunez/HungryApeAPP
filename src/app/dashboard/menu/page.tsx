@@ -14,11 +14,10 @@ import { Package, Plus, Edit3, ChevronLeft, Save, Loader2, Archive, ArchiveResto
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { ImageUploader } from '@/components/ui/image-uploader';
 import { mensajeParaPersona } from '@/lib/errores';
 import { ModifierGroupsEditor } from '@/components/menu-admin/ModifierGroupsEditor';
+import { ProductForm } from '@/components/menu-admin/ProductForm';
 
 export default function MenuManagementPage() {
   const { toast } = useToast();
@@ -129,6 +128,11 @@ export default function MenuManagementPage() {
       const privateError = !updateError && canUseCosts
         ? await saveProductPrivate(tenant.id, isEditing ?? '', privateFields).then(() => null, (e: Error) => e)
         : null;
+
+      // Products with a recipe take their stock from supplies: recompute after saving
+      if (!updateError && canUseCosts) {
+        await (supabase as any).rpc('refresh_my_recipe_stock').then(() => undefined, () => undefined);
+      }
 
       if (updateError || privateError) {
         toast({ title: 'No se pudieron guardar los cambios', description: 'Revisa tu conexión e inténtalo de nuevo.', variant: 'destructive' });
@@ -407,109 +411,13 @@ export default function MenuManagementPage() {
                 {isEditing === 'new' ? '🍌 Nuevo Producto' : '✍️ Editar Producto'}
               </h2>
 
-              <div className="grid grid-cols-2 gap-4 mb-6">
-                <div className="col-span-2">
-                  <label className="text-xs font-bold uppercase pl-1 block mb-1">Nombre del producto</label>
-                  <Input value={editProduct.name} onChange={e => setEditProduct({ ...editProduct, name: e.target.value })} className="rounded-2xl h-12" placeholder="Ej: Burger Classic" />
-                </div>
-                <div>
-                  <label className="text-xs font-bold uppercase pl-1 block mb-1">Precio ($)</label>
-                  <Input
-                    type="number"
-                    min={0}
-                    placeholder="0"
-                    value={editProduct.price || ''}
-                    onFocus={e => e.target.select()}
-                    onChange={e => setEditProduct({ ...editProduct, price: e.target.value === '' ? 0 : Number(e.target.value) })}
-                    className="rounded-2xl h-12"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold uppercase pl-1 block mb-1">Categoría</label>
-                  <input
-                    list="categories-list"
-                    className="w-full h-12 bg-muted rounded-2xl px-4 outline-none text-sm font-medium border border-transparent focus:border-primary/30"
-                    value={editProduct.category}
-                    onChange={e => setEditProduct({...editProduct, category: e.target.value})}
-                    placeholder="Escribe o elige..."
-                  />
-                  <datalist id="categories-list">
-                    <option value="Hamburguesas" />
-                    <option value="Completos" />
-                    <option value="Empanadas" />
-                    <option value="Chorrillanas" />
-                    <option value="Papas Fritas" />
-                    <option value="Bebidas" />
-                    <option value="Combos" />
-                    <option value="Postres" />
-                    <option value="Sándwiches" />
-                    <option value="Pizzas" />
-                    <option value="Extras" />
-                  </datalist>
-                </div>
-                <div>
-                  <label className="text-xs font-bold uppercase pl-1 block mb-1">Stock disponible</label>
-                  <Input
-                    type="number"
-                    min={0}
-                    placeholder="0"
-                    value={editProduct.stock || ''}
-                    onFocus={e => e.target.select()}
-                    onChange={e => setEditProduct({ ...editProduct, stock: e.target.value === '' ? 0 : Number(e.target.value) })}
-                    className="rounded-2xl h-12"
-                  />
-                </div>
-                {/* Costos (Pro): margen y reposición */}
-                <div>
-                  <label className="text-xs font-bold uppercase pl-1 block mb-1">
-                    Costo ($) {!canUseCosts && <span className="text-primary">· Pro</span>}
-                  </label>
-                  <Input
-                    type="number"
-                    min={0}
-                    placeholder={canUseCosts ? 'Lo que te cuesta hacerlo' : 'Disponible en Pro'}
-                    disabled={!canUseCosts}
-                    value={editProduct.cost ?? ''}
-                    onFocus={e => e.target.select()}
-                    onChange={e => setEditProduct({ ...editProduct, cost: e.target.value === '' ? null : Number(e.target.value) })}
-                    className="rounded-2xl h-12"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold uppercase pl-1 block mb-1">
-                    Reponer hasta (uds.) {!canUseCosts && <span className="text-primary">· Pro</span>}
-                  </label>
-                  <Input
-                    type="number"
-                    min={0}
-                    placeholder={canUseCosts ? 'Stock objetivo al comprar' : 'Disponible en Pro'}
-                    disabled={!canUseCosts}
-                    value={editProduct.restock_target ?? ''}
-                    onFocus={e => e.target.select()}
-                    onChange={e => setEditProduct({ ...editProduct, restock_target: e.target.value === '' ? null : Number(e.target.value) })}
-                    className="rounded-2xl h-12"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-bold uppercase pl-1 block mb-1">Imagen</label>
-                  <ImageUploader
-                    value={editProduct.image_url}
-                    onChange={url => setEditProduct({ ...editProduct, image_url: url })}
-                    uploadPath={`${tenant?.id}/products`}
-                    aspectRatio="square"
-                    placeholder="Subir imagen del producto"
-                  />
-                </div>
-                <div className="col-span-2">
-                  <label className="text-xs font-bold uppercase pl-1 block mb-1">Descripción</label>
-                  <textarea
-                    className="w-full h-20 bg-muted rounded-2xl p-4 outline-none text-sm resize-none"
-                    value={editProduct.description || ''}
-                    onChange={e => setEditProduct({ ...editProduct, description: e.target.value })}
-                    placeholder="Ingredientes o descripción corta..."
-                  />
-                </div>
-              </div>
+              <ProductForm
+                product={editProduct}
+                onChange={setEditProduct}
+                tenantId={tenant.id}
+                productId={isEditing === 'new' ? null : isEditing}
+                canUseCosts={canUseCosts}
+              />
 
               {/* ── Personalización del producto (opciones que elige el cliente) ── */}
               {isEditing && isEditing !== 'new' && (

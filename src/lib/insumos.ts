@@ -124,3 +124,39 @@ export function parseQty(raw: string): number | null {
   const n = Number(clean);
   return Number.isFinite(n) ? n : null;
 }
+
+/** How a purchase was bought: base units, kilos/litres, or packs of N. */
+export type BuyFormat = 'base' | 'grande' | 'pack';
+
+/** Converts what the person typed into base units and cost per base unit. Pure (tested). */
+export function purchaseToBase(
+  _unit: SupplyUnit,
+  format: BuyFormat,
+  amount: number,
+  packSize: number | null,
+  price: number | null,
+  priceIsTotal: boolean,
+): { quantity: number; unitCost: number | null } {
+  const perBuy = format === 'grande' ? 1000 : format === 'pack' ? (packSize ?? 0) : 1;
+  const quantity = amount * perBuy;
+  if (price === null || quantity <= 0) return { quantity, unitCost: null };
+  const total = priceIsTotal ? price : price * amount;
+  return { quantity, unitCost: Math.round((total / quantity) * 10000) / 10000 };
+}
+
+
+/** Price per the unit people think in: per kilo for grams, per litre for ml. */
+export function humanUnitCost(costPerBase: number, unit: SupplyUnit): { value: number; per: string } {
+  if (unit === 'g') return { value: costPerBase * 1000, per: 'kilo' };
+  if (unit === 'ml') return { value: costPerBase * 1000, per: 'litro' };
+  return { value: costPerBase, per: 'unidad' };
+}
+
+/** Last purchase price and its change vs the previous one (purchases newest first). */
+export function priceTrend(purchases: { unit_cost: number | null; created_at: string }[]): { last: number; changePct: number | null; at: string } | null {
+  const priced = purchases.filter(p => p.unit_cost !== null && p.unit_cost !== undefined) as { unit_cost: number; created_at: string }[];
+  if (priced.length === 0) return null;
+  const [last, prev] = priced;
+  const changePct = prev && prev.unit_cost > 0 ? Math.round(((last.unit_cost - prev.unit_cost) / prev.unit_cost) * 1000) / 10 : null;
+  return { last: last.unit_cost, changePct, at: last.created_at };
+}

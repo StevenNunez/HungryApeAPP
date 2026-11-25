@@ -81,6 +81,15 @@ export async function fetchMovements(tenantId: string, limit = 80): Promise<Supp
   return (data ?? []).map((m: any) => ({ ...m, quantity: Number(m.quantity), unit_cost: m.unit_cost === null ? null : Number(m.unit_cost) }));
 }
 
+/** Purchases with a price, newest first (price history per supply). */
+export async function fetchPurchases(tenantId: string, limit = 300): Promise<SupplyMovement[]> {
+  const { data, error } = await db()
+    .from('supply_movements').select('*').eq('tenant_id', tenantId).eq('kind', 'compra').not('unit_cost', 'is', null)
+    .order('created_at', { ascending: false }).limit(limit);
+  if (error) fail('historial de precios', error);
+  return (data ?? []).map((m: any) => ({ ...m, quantity: Number(m.quantity), unit_cost: Number(m.unit_cost) }));
+}
+
 /** Today's sales movements (for the "runs out around…" forecast). */
 export async function fetchSalesSince(tenantId: string, sinceIso: string): Promise<SupplyMovement[]> {
   const { data, error } = await db()

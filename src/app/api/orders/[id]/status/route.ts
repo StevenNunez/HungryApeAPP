@@ -3,6 +3,7 @@ import { createServerSupabaseClient, createServiceSupabaseClient } from '@/lib/s
 import { DEMO_TENANT_ID, notifyOrderReady } from '@/lib/notify';
 import { anotarError } from '@/lib/errores-servidor';
 import { roleInTenant } from '@/lib/roles-server';
+import { notifyLowSupplies } from '@/lib/supply-alerts';
 
 const FLOW = ['Por Pagar', 'Pendiente', 'En preparación', 'Listo', 'Entregado'] as const;
 type Status = (typeof FLOW)[number] | 'Cancelado';
@@ -88,6 +89,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
   // Customer alerts run after the response so the kitchen UI is never slowed down by them
   if (status === 'Listo') after(() => notifyOrderReady(id));
+  // Leaving "Por Pagar" deducts supplies (SQL trigger): warn the owner if some ran low
+  if (order.status === 'Por Pagar') after(() => notifyLowSupplies(order.tenant_id));
 
   return NextResponse.json({ ok: true, status });
 }

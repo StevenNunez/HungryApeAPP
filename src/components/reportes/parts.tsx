@@ -7,6 +7,9 @@ import { RANGE_LABELS, type ReportRange } from '@/lib/analytics';
 
 export const LOW_STOCK_THRESHOLD = 5;
 
+/** Chart colors (brand crimson first); the legend and the chart use the same list. */
+export const CHART_COLORS = ['#be1e36', '#2563eb', '#b45309', '#15803d', '#7c3aed'];
+
 export function StockBadge({ stock }: { stock: number | null }) {
   if (stock === null || stock === undefined) return <Badge variant="outline" className="text-xs">Sin control</Badge>;
   if (stock === 0) return <Badge className="bg-red-500/10 text-red-700 border-red-500/20 text-xs">Sin stock</Badge>;

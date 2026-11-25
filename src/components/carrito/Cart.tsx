@@ -70,7 +70,7 @@ export function Cart() {
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
 
-    const { cartItems, removeFromCart, updateQuantity, clearCart, cartTotal, ordersOpen } = useCart();
+    const { cartItems, removeFromCart, updateQuantity, clearCart, cartTotal, ordersOpen, payment } = useCart();
     const router = useRouter();
     const { toast } = useToast();
 
@@ -79,29 +79,29 @@ export function Cart() {
     const mIndex = pathParts.indexOf('m');
     const tenantSlug = mIndex !== -1 ? pathParts[mIndex + 1] : 'hungry-ape-demo';
 
+    // The menu page sends the plan with the menu (no waiting when the cart opens).
+    // Other pages under /m/… (order tracking) fetch it once, in the background.
     useEffect(() => {
-        if (open && tenantSlug) {
-            const supabase = createClient();
-            (async () => {
-                let { data } = await supabase
-                    .from('tenants_public')
-                    .select('effective_plan, online_payments')
-                    .eq('slug', tenantSlug)
-                    .single();
-                // Older databases (before migration 016) do not have online_payments yet
-                if (!data) {
-                    ({ data } = (await supabase
-                        .from('tenants_public')
-                        .select('effective_plan')
-                        .eq('slug', tenantSlug)
-                        .single()) as any);
-                }
-                const d = data as any;
-                if (d?.effective_plan) setTenantPlan(d.effective_plan);
-                setOnlineEnabled(!!d?.online_payments);
-            })();
+        if (payment) {
+            setTenantPlan(payment.plan);
+            setOnlineEnabled(payment.online);
+            return;
         }
-    }, [open, tenantSlug]);
+        if (!tenantSlug) return;
+        let cancelled = false;
+        (async () => {
+            const { data } = await createClient()
+                .from('tenants_public')
+                .select('effective_plan, online_payments')
+                .eq('slug', tenantSlug)
+                .maybeSingle();
+            const d = data as any;
+            if (cancelled || !d) return;
+            if (d.effective_plan) setTenantPlan(d.effective_plan);
+            setOnlineEnabled(!!d.online_payments);
+        })();
+        return () => { cancelled = true; };
+    }, [payment, tenantSlug]);
 
     // Filter payment methods based on plan
     // Same rule as the server (create_order) and the landing: see allowedPaymentMethods

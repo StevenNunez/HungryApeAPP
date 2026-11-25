@@ -15,15 +15,19 @@ interface MenuViewProps {
   initialItems: MenuItemType[];
   initialGroups: Record<string, ModifierGroup[]>;
   ordersOpen?: boolean;
+  payment?: { plan: string; online: boolean };
 }
 
 /**
  * Interactive part of the public menu. The first paint comes from the server
  * (initialItems / initialGroups); this component only keeps stock live.
  */
-export function MenuView({ tenantSlug, tenantId, tenantName, initialItems, initialGroups, ordersOpen = true }: MenuViewProps) {
-  const { setOrdersOpen } = useCart();
+export function MenuView({ tenantSlug, tenantId, tenantName, initialItems, initialGroups, ordersOpen = true, payment }: MenuViewProps) {
+  const { setOrdersOpen, setPayment } = useCart();
   useEffect(() => { setOrdersOpen(ordersOpen); }, [ordersOpen, setOrdersOpen]);
+  const plan = payment?.plan;
+  const online = payment?.online;
+  useEffect(() => { if (plan !== undefined) setPayment({ plan, online: !!online }); }, [plan, online, setPayment]);
   const [menuItems, setMenuItems] = useState<MenuItemType[]>(initialItems);
   const [modifierGroups, setModifierGroups] = useState<Record<string, ModifierGroup[]>>(initialGroups);
 

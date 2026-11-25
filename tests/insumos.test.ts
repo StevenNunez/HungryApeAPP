@@ -68,3 +68,32 @@ describe('cuándo se acaba', () => {
     expect(runOutForecast(15, [{ quantity: -1, created_at: new Date().toISOString() }], new Date())).toBeNull();
   });
 });
+
+import { purchaseToBase, priceTrend, humanUnitCost } from '@/lib/insumos';
+
+describe('compras en kilos o en cajas', () => {
+  it('2 kilos de palta a $8.000 el kilo → 2.000 g a $8 por gramo', () => {
+    expect(purchaseToBase('g', 'grande', 2, null, 8000, false)).toEqual({ quantity: 2000, unitCost: 8 });
+  });
+
+  it('3 cajas de 24 bebidas por $30.000 en total → 72 unidades a $416,67', () => {
+    const r = purchaseToBase('unidad', 'pack', 3, 24, 30000, true);
+    expect(r.quantity).toBe(72);
+    expect(r.unitCost).toBeCloseTo(416.6667, 3);
+  });
+
+  it('sin precio no cambia el costo', () => {
+    expect(purchaseToBase('unidad', 'base', 10, null, null, true)).toEqual({ quantity: 10, unitCost: null });
+  });
+});
+
+describe('historial de precios', () => {
+  it('último precio y variación contra la compra anterior', () => {
+    const t = priceTrend([
+      { unit_cost: 8.8, created_at: '2026-11-24' },
+      { unit_cost: 8, created_at: '2026-11-10' },
+    ]);
+    expect(t).toEqual({ last: 8.8, changePct: 10, at: '2026-11-24' });
+    expect(humanUnitCost(8.8, 'g')).toEqual({ value: 8800, per: 'kilo' });
+  });
+});

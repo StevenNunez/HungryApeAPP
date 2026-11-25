@@ -1,5 +1,6 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
@@ -220,13 +221,13 @@ export default function SetupPage() {
                 <p className="text-xs text-muted-foreground mt-2 pl-1">Este nombre verán tus clientes en el menú y QR.</p>
               </div>
 
-              <button
+              <Button
                 type="submit"
                 disabled={loading || !businessName.trim()}
-                className="w-full h-14 bg-primary text-primary-foreground font-bold text-base rounded-2xl hover:bg-primary/90 disabled:opacity-50 transition-all active:scale-95 flex items-center justify-center gap-2"
+                className="w-full h-14 text-base font-bold rounded-2xl gap-2 active:scale-95"
               >
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <>Continuar <ArrowRight className="h-5 w-5" /></>}
-              </button>
+              </Button>
             </form>
           </div>
         )}
@@ -286,13 +287,13 @@ export default function SetupPage() {
                 </div>
               </div>
 
-              <button
+              <Button
                 type="submit"
                 disabled={loading || !productName.trim() || !productPrice}
-                className="w-full h-14 bg-primary text-primary-foreground font-bold text-base rounded-2xl hover:bg-primary/90 disabled:opacity-50 transition-all active:scale-95 flex items-center justify-center gap-2"
+                className="w-full h-14 text-base font-bold rounded-2xl gap-2 active:scale-95"
               >
                 {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <>Agregar al menú <ArrowRight className="h-5 w-5" /></>}
-              </button>
+              </Button>
 
               <button
                 type="button"

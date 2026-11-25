@@ -18,11 +18,11 @@ import { canUseSupplies } from '@/lib/plans';
 import { formatCLP } from '@/lib/utils';
 import { mensajeParaPersona } from '@/lib/errores';
 import {
-  MOVEMENT_LABEL, formatQty, formatQtyShort, runOutForecast, supplyLevel, toBuy,
+  MOVEMENT_LABEL, formatQty, formatQtyShort, humanUnitCost, priceTrend, runOutForecast, supplyLevel, toBuy,
   type RecipeLine, type Supply, type SupplyMovement,
 } from '@/lib/insumos';
 import {
-  archiveSupply, createSupply, fetchMovements, fetchOptionRecipes, fetchProductRecipes, fetchSalesSince, fetchSupplies,
+  archiveSupply, createSupply, fetchMovements, fetchPurchases, fetchOptionRecipes, fetchProductRecipes, fetchSalesSince, fetchSupplies,
   recordMovement, updateSupply, type SupplyInput,
 } from '@/lib/insumos-data';
 import { MovementDialog, SupplyFormDialog, type MovementKind } from '@/components/insumos/SupplyDialogs';
@@ -47,6 +47,7 @@ export default function InsumosPage() {
   const [supplies, setSupplies] = useState<Supply[]>([]);
   const [movements, setMovements] = useState<SupplyMovement[]>([]);
   const [salesToday, setSalesToday] = useState<SupplyMovement[]>([]);
+  const [purchases, setPurchases] = useState<SupplyMovement[]>([]);
   const [productRecipes, setProductRecipes] = useState<Record<string, RecipeLine[]>>({});
   const [optionRecipes, setOptionRecipes] = useState<Record<string, RecipeLine[]>>({});
   const [formOpen, setFormOpen] = useState(false);
@@ -57,14 +58,15 @@ export default function InsumosPage() {
   const load = useCallback(async () => {
     if (!tenantId || !allowed) { setLoading(false); return; }
     try {
-      const [s, m, today, pr, or] = await Promise.all([
+      const [s, m, today, pr, or, buys] = await Promise.all([
         fetchSupplies(tenantId),
         fetchMovements(tenantId),
         fetchSalesSince(tenantId, startOfTodayInChile()),
         fetchProductRecipes(tenantId),
         fetchOptionRecipes(tenantId),
+        fetchPurchases(tenantId),
       ]);
-      setSupplies(s); setMovements(m); setSalesToday(today); setProductRecipes(pr); setOptionRecipes(or);
+      setSupplies(s); setMovements(m); setSalesToday(today); setProductRecipes(pr); setOptionRecipes(or); setPurchases(buys);
       setLoadError('');
     } catch (e) {
       setLoadError(mensajeParaPersona(e, 'insumos: cargar'));
@@ -209,6 +211,8 @@ export default function InsumosPage() {
                   {supplies.map(s => {
                     const level = supplyLevel(s);
                     const forecast = runOutForecast(s.stock, salesToday.filter(m => m.supply_id === s.id));
+                    const trend = priceTrend(purchases.filter(m => m.supply_id === s.id));
+                    const shown = trend ? humanUnitCost(trend.last, s.unit) : null;
                     return (
                       <Card key={s.id} className={`border-2 ${level === 'agotado' ? 'border-red-500/40' : level === 'bajo' ? 'border-amber-500/40' : 'border-border'}`}>
                         <CardContent className="p-4 space-y-3">
@@ -224,7 +228,17 @@ export default function InsumosPage() {
                           <div className="text-xs text-muted-foreground space-y-0.5">
                             {forecast && <p className="flex items-center gap-1 font-semibold text-amber-900"><Clock className="h-3.5 w-3.5" /> Al ritmo de hoy se acaba cerca de las {fmtTime(forecast)}</p>}
                             <p>Aviso bajo {formatQtyShort(s.min_stock, s.unit)}{s.target_stock != null && ` · reponer hasta ${formatQtyShort(s.target_stock, s.unit)}`}</p>
-                            <p>{s.cost_per_unit != null ? `${formatCLP(s.cost_per_unit)} por ${s.unit === 'unidad' ? 'unidad' : s.unit}` : 'Sin costo cargado'} · en {usedIn.get(s.id) ?? 0} receta{(usedIn.get(s.id) ?? 0) === 1 ? '' : 's'}</p>
+                            <p>{s.cost_per_unit != null ? `${formatCLP(humanUnitCost(s.cost_per_unit, s.unit).value)} por ${humanUnitCost(s.cost_per_unit, s.unit).per}` : 'Sin costo cargado'} · en {usedIn.get(s.id) ?? 0} receta{(usedIn.get(s.id) ?? 0) === 1 ? '' : 's'}</p>
+                            {trend && shown && (
+                              <p>
+                                Última compra: {formatCLP(shown.value)} por {shown.per}
+                                {trend.changePct !== null && trend.changePct !== 0 && (
+                                  <span className={`ml-1 font-bold ${trend.changePct > 0 ? 'text-red-700' : 'text-green-800'}`}>
+                                    {trend.changePct > 0 ? '▲' : '▼'} {Math.abs(trend.changePct)}% vs la anterior
+                                  </span>
+                                )}
+                              </p>
+                            )}
                           </div>
                           <div className="grid grid-cols-3 gap-1.5">
                             <Button variant="outline" size="sm" className="min-h-11 px-1 text-xs" onClick={() => setMoveTarget({ supply: s, kind: 'compra' })}>

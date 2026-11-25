@@ -230,15 +230,19 @@ export function PricingSection() {
           
           <div className="mt-10 flex items-center justify-center gap-4">
             <span className={`text-sm font-bold ${!isAnnual ? 'text-foreground' : 'text-muted-foreground'}`}>Mensual</span>
-            <button 
+            <button
+              type="button"
+              role="switch"
+              aria-checked={isAnnual}
+              aria-label="Pagar anual (ahorras 20%)"
               onClick={() => setIsAnnual(!isAnnual)}
-              className="relative inline-flex h-8 w-14 items-center rounded-full bg-primary/20 transition-colors focus:outline-none"
+              className="relative inline-flex h-8 w-14 items-center rounded-full bg-primary/20 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
             >
               <div className={`inline-block h-6 w-6 transform rounded-full bg-primary transition-transform ${isAnnual ? 'translate-x-7' : 'translate-x-1'}`} />
             </button>
             <div className="flex items-center gap-2">
               <span className={`text-sm font-bold ${isAnnual ? 'text-foreground' : 'text-muted-foreground'}`}>Anual</span>
-              <span className="bg-green-500/20 text-green-500 text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">Ahorras 20%</span>
+              <span className="bg-green-500/20 text-green-800 text-xs font-bold px-2 py-0.5 rounded-full uppercase tracking-wider animate-pulse">Ahorras 20%</span>
             </div>
           </div>
         </div>
@@ -328,8 +332,10 @@ export function PricingSection() {
               className="relative w-full max-w-md bg-card border border-border rounded-panel shadow-2xl overflow-hidden"
             >
               <button
+                type="button"
                 onClick={() => setSelectedPlan(null)}
-                className="absolute top-6 right-6 p-2 rounded-full hover:bg-muted transition-colors"
+                aria-label="Cerrar"
+                className="absolute top-5 right-5 grid h-11 w-11 place-items-center rounded-full hover:bg-muted transition-colors"
               >
                 <X className="h-5 w-5" />
               </button>

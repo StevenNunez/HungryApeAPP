@@ -5,7 +5,7 @@ import { newInvitationToken, normalizeEmail, originOf, INVITATION_DAYS } from '@
 import { sendInvitationEmail } from '@/lib/invitation-email';
 import { smtpConfigured } from '@/lib/email';
 import { anotarError } from '@/lib/errores-servidor';
-import { rateLimit } from '@/lib/rate-limit';
+import { rateLimitShared } from '@/lib/rate-limit';
 import { canUseTeam, getEffectivePlan } from '@/lib/plans';
 
 /**
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invitar a tu equipo es parte del Plan Enterprise.' }, { status: 402 });
   }
 
-  if (!rateLimit(`equipo-invitar:${user.id}`, 20, 60 * 60 * 1000)) {
+  if (!(await rateLimitShared(`equipo-invitar:${user.id}`, 20, 60 * 60 * 1000))) {
     return NextResponse.json({ error: 'Enviaste muchas invitaciones seguidas. Espera un rato.' }, { status: 429 });
   }
 
